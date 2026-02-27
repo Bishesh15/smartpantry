@@ -1,0 +1,15 @@
+# Secrets - never commit
+config/secrets.php
+
+# IDE / OS
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
+
+# Dependencies
+/vendor/
+/node_modules/
+
+# Environment
+.env
