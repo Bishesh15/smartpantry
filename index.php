@@ -12,11 +12,8 @@ require_once __DIR__ . '/config/constants.php';
 if (isAdmin()) {
     // Admin logged in - go to admin panel
     redirect(BASE_URL . 'views/admin/dashboard.php');
-} elseif (isLoggedIn()) {
-    // Regular user logged in - go to user home
-    redirect(BASE_URL . 'views/user/home.php');
 } else {
-    // Not logged in - go to user login (public side)
-    redirect(BASE_URL . 'views/user/login.php');
+    // All users (logged in or not) go to the landing page
+    redirect(BASE_URL . 'views/user/home.php');
 }
 

@@ -7,12 +7,15 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../models/Rating.php';
+require_once __DIR__ . '/../models/User.php';
 
 class UserController {
     private $rating;
+    private $userModel;
 
     public function __construct() {
         $this->rating = new Rating();
+        $this->userModel = new User();
     }
 
     /**
@@ -25,13 +28,13 @@ class UserController {
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         // Verify CSRF token
         if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
             $_SESSION['error'] = 'Invalid security token';
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         $recipe_id = validateInteger($_POST['recipe_id'] ?? 0, 1);
@@ -70,14 +73,14 @@ class UserController {
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         $recipe_id = validateInteger($_POST['recipe_id'] ?? 0, 1);
 
         if ($recipe_id === false) {
             $_SESSION['error'] = 'Invalid recipe ID';
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         try {
@@ -120,14 +123,14 @@ class UserController {
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         $recipe_id = validateInteger($_POST['recipe_id'] ?? 0, 1);
 
         if ($recipe_id === false) {
             $_SESSION['error'] = 'Invalid recipe ID';
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         try {
@@ -169,6 +172,94 @@ class UserController {
             return false;
         }
     }
+
+    /**
+     * Update user preferences (dietary, food)
+     */
+    public function updatePreferences() {
+        if (!isLoggedIn()) {
+            redirect(BASE_URL . 'views/user/login.php');
+        }
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect(BASE_URL . 'views/user/dashboard.php');
+        }
+        if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+            $_SESSION['error'] = 'Invalid security token';
+            redirect(BASE_URL . 'views/user/dashboard.php');
+        }
+
+        $food_prefs = isset($_POST['food_preferences']) ? implode(',', $_POST['food_preferences']) : '';
+        $dietary = isset($_POST['dietary_restrictions']) ? implode(',', $_POST['dietary_restrictions']) : '';
+
+        $food_prefs = sanitize($food_prefs);
+        $dietary = sanitize($dietary);
+
+        if ($this->userModel->updatePreferences($_SESSION['user_id'], $food_prefs, $dietary)) {
+            $_SESSION['success'] = 'Preferences updated successfully';
+        } else {
+            $_SESSION['error'] = 'Failed to update preferences';
+        }
+        redirect(BASE_URL . 'views/user/dashboard.php');
+    }
+
+    /**
+     * Update username
+     */
+    public function updateUsername() {
+        if (!isLoggedIn()) {
+            redirect(BASE_URL . 'views/user/login.php');
+        }
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect(BASE_URL . 'views/user/dashboard.php');
+        }
+        if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+            $_SESSION['error'] = 'Invalid security token';
+            redirect(BASE_URL . 'views/user/dashboard.php');
+        }
+
+        $new_username = sanitize($_POST['new_username'] ?? '');
+        $result = $this->userModel->updateUsername($_SESSION['user_id'], $new_username);
+
+        if ($result['success']) {
+            $_SESSION['success'] = $result['message'];
+        } else {
+            $_SESSION['error'] = $result['message'];
+        }
+        redirect(BASE_URL . 'views/user/dashboard.php');
+    }
+
+    /**
+     * Update password
+     */
+    public function updatePassword() {
+        if (!isLoggedIn()) {
+            redirect(BASE_URL . 'views/user/login.php');
+        }
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            redirect(BASE_URL . 'views/user/dashboard.php');
+        }
+        if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+            $_SESSION['error'] = 'Invalid security token';
+            redirect(BASE_URL . 'views/user/dashboard.php');
+        }
+
+        $current_password = $_POST['current_password'] ?? '';
+        $new_password = $_POST['new_password'] ?? '';
+
+        if (empty($current_password) || empty($new_password)) {
+            $_SESSION['error'] = 'Both current and new passwords are required';
+            redirect(BASE_URL . 'views/user/dashboard.php');
+        }
+
+        $result = $this->userModel->updatePassword($_SESSION['user_id'], $current_password, $new_password);
+
+        if ($result['success']) {
+            $_SESSION['success'] = $result['message'];
+        } else {
+            $_SESSION['error'] = $result['message'];
+        }
+        redirect(BASE_URL . 'views/user/dashboard.php');
+    }
 }
 
 // Handle requests
@@ -185,8 +276,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         case 'remove_favorite':
             $controller->removeFavorite();
             break;
+        case 'update_preferences':
+            $controller->updatePreferences();
+            break;
+        case 'update_username':
+            $controller->updateUsername();
+            break;
+        case 'update_password':
+            $controller->updatePassword();
+            break;
         default:
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
     }
 }
 

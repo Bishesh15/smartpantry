@@ -23,7 +23,7 @@ require_once __DIR__ . '/../../config/constants.php';
                 <nav class="main-nav">
                     <?php if (isLoggedIn()): ?>
                         <!-- USER MENU -->
-                        <a href="<?php echo BASE_URL; ?>views/user/home.php">Home</a>
+                        <a href="<?php echo BASE_URL; ?>views/user/recipe-search.php">Recipes</a>
                         <a href="<?php echo BASE_URL; ?>views/user/contact.php">Contact</a>
                         <span class="user-info">Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
                         <a href="<?php echo BASE_URL; ?>controllers/AuthController.php?action=logout">Logout</a>

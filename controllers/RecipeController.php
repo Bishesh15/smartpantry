@@ -26,7 +26,7 @@ class RecipeController {
      */
     public function matchRecipes() {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         $ingredient_ids = isset($_POST['ingredients']) && is_array($_POST['ingredients']) 
@@ -43,7 +43,7 @@ class RecipeController {
         
         if (empty($valid_ids)) {
             $_SESSION['error'] = 'Please select at least one valid ingredient';
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
         
         $ingredient_ids = $valid_ids;
@@ -63,7 +63,7 @@ class RecipeController {
         $_SESSION['matched_recipes'] = $recipes;
         $_SESSION['selected_ingredients'] = $ingredient_ids;
         
-        redirect(BASE_URL . 'views/user/home.php');
+        redirect(BASE_URL . 'views/user/recipe-search.php');
     }
 
     /**
@@ -71,14 +71,14 @@ class RecipeController {
      */
     public function search() {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         $search_term = isset($_POST['search']) ? sanitize($_POST['search']) : '';
         
         if (empty($search_term)) {
             $_SESSION['error'] = 'Please enter a search term';
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         $recipes = $this->recipe->search($search_term);
@@ -86,7 +86,7 @@ class RecipeController {
         $_SESSION['search_results'] = $recipes;
         $_SESSION['search_term'] = $search_term;
         
-        redirect(BASE_URL . 'views/user/home.php');
+        redirect(BASE_URL . 'views/user/recipe-search.php');
     }
 
     /**
@@ -97,14 +97,14 @@ class RecipeController {
         $recipe_id = validateInteger($recipe_id, 1);
         if ($recipe_id === false) {
             $_SESSION['error'] = 'Invalid recipe ID';
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
         
         $recipe = $this->recipe->getById($recipe_id);
         
         if (!$recipe) {
             $_SESSION['error'] = 'Recipe not found';
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         // Get recipe ingredients
@@ -212,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $controller->search();
             break;
         default:
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
     }
 }
 

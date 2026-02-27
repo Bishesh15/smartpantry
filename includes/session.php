@@ -15,7 +15,7 @@ if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1);
     ini_set('session.cookie_secure', 0); // Set to 1 in production with HTTPS
     ini_set('session.use_only_cookies', 1);
-    ini_set('session.cookie_samesite', 'Strict');
+    ini_set('session.cookie_samesite', 'Lax'); // Lax required for OAuth redirects (Strict blocks cross-site redirects)
     
     // Set session name
     $session_name = defined('SESSION_NAME') ? SESSION_NAME : 'SMARTPANTRY_SESSION';

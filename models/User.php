@@ -188,6 +188,138 @@ class User {
     }
 
     /**
+     * Update username
+     */
+    public function updateUsername($user_id, $new_username) {
+        $new_username = sanitize($new_username);
+        if (empty($new_username) || strlen($new_username) < 3) {
+            return ['success' => false, 'message' => 'Username must be at least 3 characters'];
+        }
+        if ($this->usernameExists($new_username)) {
+            return ['success' => false, 'message' => 'Username already taken'];
+        }
+        try {
+            $query = "UPDATE " . $this->table . " SET username = :username WHERE id = :id";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':username', $new_username);
+            $stmt->bindParam(':id', $user_id, PDO::PARAM_INT);
+            if ($stmt->execute()) {
+                $_SESSION['username'] = $new_username;
+                return ['success' => true, 'message' => 'Username updated successfully'];
+            }
+            return ['success' => false, 'message' => 'Failed to update username'];
+        } catch (PDOException $e) {
+            error_log("Update Username Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Database error occurred'];
+        }
+    }
+
+    /**
+     * Update password (expects pre-hashed from client bcrypt)
+     */
+    public function updatePassword($user_id, $current_password_hash, $new_password_hash) {
+        try {
+            // Verify current password
+            $query = "SELECT password_hash FROM " . $this->table . " WHERE id = :id LIMIT 1";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':id', $user_id, PDO::PARAM_INT);
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row || !password_verify($current_password_hash, $row['password_hash'])) {
+                return ['success' => false, 'message' => 'Current password is incorrect'];
+            }
+
+            $server_hash = password_hash($new_password_hash, PASSWORD_BCRYPT);
+            $query = "UPDATE " . $this->table . " SET password_hash = :password_hash WHERE id = :id";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':password_hash', $server_hash);
+            $stmt->bindParam(':id', $user_id, PDO::PARAM_INT);
+            if ($stmt->execute()) {
+                return ['success' => true, 'message' => 'Password updated successfully'];
+            }
+            return ['success' => false, 'message' => 'Failed to update password'];
+        } catch (PDOException $e) {
+            error_log("Update Password Error: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Database error occurred'];
+        }
+    }
+
+    /**
+     * Get user's favorite recipes
+     */
+    public function getFavorites($user_id, $limit = 10) {
+        try {
+            $query = "SELECT r.* FROM recipes r
+                      INNER JOIN favorites f ON r.id = f.recipe_id
+                      WHERE f.user_id = :user_id
+                      ORDER BY f.created_at DESC
+                      LIMIT :limit";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Get Favorites Error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get user's recent views
+     */
+    public function getRecentViews($user_id, $limit = 10) {
+        try {
+            $query = "SELECT r.*, rv.viewed_at FROM recipes r
+                      INNER JOIN recent_views rv ON r.id = rv.recipe_id
+                      WHERE rv.user_id = :user_id
+                      ORDER BY rv.viewed_at DESC
+                      LIMIT :limit";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
+            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Get Recent Views Error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Get user stats
+     */
+    public function getUserStats($user_id) {
+        try {
+            $conn = $this->conn;
+            // Favorites count
+            $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM favorites WHERE user_id = :uid");
+            $stmt->execute([':uid' => $user_id]);
+            $fav_count = $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
+
+            // Ratings count
+            $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM ratings WHERE user_id = :uid");
+            $stmt->execute([':uid' => $user_id]);
+            $rating_count = $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
+
+            // Recent views count
+            $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM recent_views WHERE user_id = :uid");
+            $stmt->execute([':uid' => $user_id]);
+            $view_count = $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
+
+            return [
+                'favorites' => (int)$fav_count,
+                'ratings' => (int)$rating_count,
+                'views' => (int)$view_count
+            ];
+        } catch (PDOException $e) {
+            error_log("Get User Stats Error: " . $e->getMessage());
+            return ['favorites' => 0, 'ratings' => 0, 'views' => 0];
+        }
+    }
+
+    /**
      * Check if username exists
      */
     private function usernameExists($username) {

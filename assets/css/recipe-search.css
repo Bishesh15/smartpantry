@@ -1,0 +1,813 @@
+/* SmartPantry Recipe Search Page Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #1a1a1a;
+    background: #ffffff;
+    line-height: 1.6;
+}
+
+/* Old rs-nav styles removed — now using landing-nav from landing.css */
+
+/* ===================== NAV SEARCH BAR ===================== */
+.nav-search-bar {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    max-width: 420px;
+    background: #f3f4f6;
+    border-radius: 10px;
+    padding: 0 0.4rem 0 0.85rem;
+    border: 1.5px solid transparent;
+    transition: all 0.2s;
+}
+
+.nav-search-bar:focus-within {
+    border-color: #22c55e;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.nav-search-icon {
+    flex-shrink: 0;
+}
+
+.nav-search-input {
+    flex: 1;
+    border: none;
+    outline: none;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.875rem;
+    font-family: inherit;
+    background: transparent;
+    color: #1a1a1a;
+}
+
+.nav-search-input::placeholder {
+    color: #9ca3af;
+}
+
+.nav-search-btn {
+    background: #22c55e;
+    color: #fff;
+    border: none;
+    padding: 0.4rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.8rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.nav-search-btn:hover {
+    background: #16a34a;
+}
+
+/* ===================== BREADCRUMB ===================== */
+.rs-breadcrumb {
+    padding: 0.75rem 1.5rem;
+    padding-top: calc(64px + 0.75rem);
+    background: #fff;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.rs-container {
+    max-width: 1360px;
+    margin: 0 auto;
+}
+
+.rs-breadcrumb a {
+    color: #22c55e;
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: color 0.2s;
+}
+
+.rs-breadcrumb a:hover {
+    color: #16a34a;
+}
+
+.rs-breadcrumb span {
+    color: #9ca3af;
+    font-size: 0.85rem;
+    margin: 0 0.35rem;
+}
+
+.rs-breadcrumb .current {
+    color: #6b7280;
+}
+
+/* ===================== MAIN LAYOUT ===================== */
+.rs-layout {
+    max-width: 1360px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 2rem;
+    padding: 1.5rem;
+    min-height: calc(100vh - 200px);
+}
+
+/* ===================== SIDEBAR ===================== */
+.rs-sidebar {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.5rem;
+    height: fit-content;
+    position: sticky;
+    top: 80px;
+    border: 1px solid #f0f0f0;
+}
+
+.rs-filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.rs-filter-header h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.rs-filter-reset {
+    background: none;
+    border: none;
+    color: #22c55e;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.2s;
+}
+
+.rs-filter-reset:hover {
+    color: #16a34a;
+}
+
+.rs-filter-group {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.rs-filter-group:last-of-type {
+    border-bottom: none;
+}
+
+.rs-filter-group h4 {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #22c55e;
+    letter-spacing: 1px;
+    margin-bottom: 0.75rem;
+}
+
+.rs-filter-option {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.4rem 0;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #374151;
+    transition: color 0.2s;
+}
+
+.rs-filter-option:hover {
+    color: #1a1a1a;
+}
+
+.rs-filter-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: #22c55e;
+    cursor: pointer;
+}
+
+.rs-checkmark {
+    display: none;
+}
+
+/* Range Slider */
+.rs-range-wrapper {
+    padding: 0.5rem 0;
+}
+
+.rs-range-input {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #e5e7eb;
+    border-radius: 3px;
+    outline: none;
+    margin-bottom: 0.5rem;
+}
+
+.rs-range-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #22c55e;
+    cursor: pointer;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+.rs-range-input::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #22c55e;
+    cursor: pointer;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+.rs-range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: #9ca3af;
+}
+
+.rs-more-filters-btn {
+    width: 100%;
+    padding: 0.65rem;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    color: #374151;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+}
+
+.rs-more-filters-btn:hover {
+    border-color: #22c55e;
+    color: #22c55e;
+}
+
+/* ===================== MAIN CONTENT ===================== */
+.rs-main {
+    min-width: 0;
+}
+
+/* Results Header */
+.rs-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+}
+
+.rs-results-info h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 0.5rem;
+}
+
+.rs-ingredient-tags {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.rs-tag-label {
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.rs-ingredient-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: #22c55e;
+    color: #fff;
+    padding: 0.3rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.rs-tag-remove {
+    background: none;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.rs-tag-remove:hover {
+    opacity: 1;
+}
+
+.rs-add-more {
+    background: none;
+    border: none;
+    color: #22c55e;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: color 0.2s;
+}
+
+.rs-add-more:hover {
+    color: #16a34a;
+}
+
+.rs-showing-text {
+    font-size: 0.8rem;
+    color: #22c55e;
+}
+
+.rs-sort-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.rs-sort-wrapper label {
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.rs-sort-select {
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    color: #374151;
+    background: #fff;
+    cursor: pointer;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg width='12' height='12' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+}
+
+.rs-sort-select:focus {
+    border-color: #22c55e;
+}
+
+/* Alerts */
+.rs-alert {
+    padding: 0.75rem 1.25rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+    transition: opacity 0.5s;
+}
+
+.rs-alert-success {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.rs-alert-error {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+/* ===================== RECIPE CARDS (LIST STYLE) ===================== */
+.rs-recipe-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.rs-recipe-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #f0f0f0;
+    display: flex;
+    overflow: hidden;
+    transition: all 0.25s;
+    position: relative;
+}
+
+.rs-recipe-card:hover {
+    box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+    border-color: #e0e0e0;
+}
+
+.rs-badge-pick {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.25rem 0.65rem;
+    border-radius: 6px;
+    letter-spacing: 0.5px;
+    z-index: 2;
+}
+
+.rs-card-image {
+    width: 220px;
+    min-height: 200px;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: #f3f4f6;
+}
+
+.rs-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s;
+}
+
+.rs-recipe-card:hover .rs-card-image img {
+    transform: scale(1.05);
+}
+
+.rs-card-content {
+    padding: 1.25rem 1.5rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.rs-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.rs-card-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 0.25rem;
+}
+
+.rs-favorite-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #d1d5db;
+    flex-shrink: 0;
+    padding: 0.25rem;
+    transition: color 0.2s;
+}
+
+.rs-favorite-btn:hover {
+    color: #ef4444;
+}
+
+.rs-favorite-btn.active {
+    color: #ef4444;
+}
+
+.rs-favorite-btn.active svg {
+    fill: #ef4444;
+}
+
+.rs-card-rating {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.rs-card-rating .star-rating {
+    display: inline-flex;
+    gap: 1px;
+}
+
+.rs-card-rating .star {
+    font-size: 0.95rem;
+}
+
+.rs-rating-count {
+    font-size: 0.8rem;
+    color: #9ca3af;
+}
+
+.rs-card-desc {
+    color: #6b7280;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin-bottom: 0.75rem;
+}
+
+.rs-card-tags {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.rs-tag {
+    display: inline-block;
+    padding: 0.2rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.rs-tag-cuisine {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.rs-tag-dietary {
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+.rs-tag-spicy {
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+.rs-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.rs-card-meta {
+    display: flex;
+    gap: 1.25rem;
+    align-items: center;
+}
+
+.rs-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.rs-meta-match {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    color: #22c55e;
+    font-weight: 600;
+}
+
+.rs-view-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1.25rem;
+    background: #22c55e;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.rs-view-btn:hover {
+    background: #16a34a;
+    transform: translateY(-1px);
+}
+
+/* No Results */
+.rs-no-results {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #f0f0f0;
+}
+
+.rs-no-results svg {
+    margin-bottom: 1rem;
+}
+
+.rs-no-results h3 {
+    font-size: 1.25rem;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+.rs-no-results p {
+    color: #9ca3af;
+    margin-bottom: 1.5rem;
+}
+
+.rs-btn-primary {
+    display: inline-block;
+    background: #22c55e;
+    color: #fff;
+    text-decoration: none;
+    padding: 0.65rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.rs-btn-primary:hover {
+    background: #16a34a;
+}
+
+/* Load More */
+.rs-load-more {
+    text-align: center;
+    padding: 2rem 0;
+}
+
+.rs-load-more-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 2rem;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    color: #374151;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+}
+
+.rs-load-more-btn:hover {
+    border-color: #22c55e;
+    color: #22c55e;
+}
+
+/* ===================== FOOTER ===================== */
+.rs-footer {
+    background: #fff;
+    border-top: 1px solid #f0f0f0;
+    padding: 1.5rem;
+    margin-top: 2rem;
+}
+
+.rs-footer-container {
+    max-width: 1360px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.rs-footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+    color: #1a1a1a;
+    font-size: 0.95rem;
+}
+
+.rs-footer-links {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.rs-footer-links a {
+    color: #6b7280;
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: color 0.2s;
+}
+
+.rs-footer-links a:hover {
+    color: #22c55e;
+}
+
+.rs-footer-container p {
+    color: #9ca3af;
+    font-size: 0.8rem;
+}
+
+/* ===================== STAR RATING (from existing styles) ===================== */
+.star-rating {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.star {
+    color: #d1d5db;
+    font-size: 1rem;
+}
+
+.star.filled {
+    color: #f59e0b;
+}
+
+.star.half {
+    color: #f59e0b;
+    opacity: 0.6;
+}
+
+/* ===================== RESPONSIVE ===================== */
+@media (max-width: 1024px) {
+    .rs-layout {
+        grid-template-columns: 200px 1fr;
+        gap: 1.25rem;
+    }
+
+    .rs-card-image {
+        width: 180px;
+    }
+
+    .nav-links {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .rs-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .rs-sidebar {
+        position: static;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .rs-filter-header {
+        grid-column: 1 / -1;
+    }
+
+    .rs-more-filters-btn {
+        grid-column: 1 / -1;
+    }
+
+    .rs-recipe-card {
+        flex-direction: column;
+    }
+
+    .rs-card-image {
+        width: 100%;
+        min-height: 180px;
+        max-height: 220px;
+    }
+
+    .rs-results-header {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .nav-links {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .rs-sidebar {
+        grid-template-columns: 1fr;
+    }
+
+    .rs-card-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .rs-card-meta {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+}

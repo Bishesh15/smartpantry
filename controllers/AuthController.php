@@ -123,7 +123,7 @@ class AuthController {
         }
 
         $loginUrl = BASE_URL . 'views/user/login.php';
-        $homeUrl = BASE_URL . 'views/user/home.php';
+        $homeUrl = BASE_URL . 'views/user/recipe-search.php';
 
         // Verify CSRF token
         if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
@@ -171,7 +171,7 @@ class AuthController {
         unset($_SESSION['food_preferences']);
         unset($_SESSION['dietary_restrictions']);
         $_SESSION['success'] = 'You have been logged out successfully';
-        redirect(BASE_URL . 'views/user/login.php');
+        redirect(BASE_URL . 'views/user/home.php');
     }
 }
 

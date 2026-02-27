@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../config/constants.php';
 
 // Redirect if already logged in as user
 if (isLoggedIn() && !isAdmin()) {
-    redirect(BASE_URL . 'views/user/home.php');
+    redirect(BASE_URL . 'views/user/recipe-search.php');
 }
 
 // Google OAuth URL

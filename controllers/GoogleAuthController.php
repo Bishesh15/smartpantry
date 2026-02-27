@@ -82,12 +82,19 @@ class GoogleAuthController {
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // XAMPP localhost - set to true in production with proper CA bundle
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);     // XAMPP localhost - set to 2 in production
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
         $response = curl_exec($ch);
+        $curlError = curl_error($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        if ($curlError) {
+            error_log("Google OAuth cURL error: $curlError");
+            return null;
+        }
 
         if ($httpCode !== 200 || !$response) {
             error_log("Google OAuth token exchange failed. HTTP: $httpCode, Response: $response");
@@ -115,12 +122,18 @@ class GoogleAuthController {
             'Authorization: Bearer ' . $accessToken,
             'Accept: application/json'
         ]);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // XAMPP localhost
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);     // XAMPP localhost
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
         $response = curl_exec($ch);
+        $curlError = curl_error($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        if ($curlError) {
+            error_log("Google OAuth userinfo cURL error: $curlError");
+        }
 
         if ($httpCode !== 200 || !$response) {
             error_log("Google OAuth user info failed. HTTP: $httpCode");
@@ -151,7 +164,7 @@ class GoogleAuthController {
             // User exists with this Google ID - log them in
             $this->setUserSession($existingUser);
             $_SESSION['success'] = 'Welcome back! Logged in with Google.';
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         // Try to find user by email
@@ -162,7 +175,7 @@ class GoogleAuthController {
             $this->user->linkGoogleAccount($existingUser['id'], $googleId);
             $this->setUserSession($existingUser);
             $_SESSION['success'] = 'Google account linked! Logged in successfully.';
-            redirect(BASE_URL . 'views/user/home.php');
+            redirect(BASE_URL . 'views/user/recipe-search.php');
         }
 
         // New user - register with Google
@@ -174,7 +187,7 @@ class GoogleAuthController {
             if ($newUser) {
                 $this->setUserSession($newUser);
                 $_SESSION['success'] = 'Account created with Google! Welcome to Smart Pantry.';
-                redirect(BASE_URL . 'views/user/home.php');
+                redirect(BASE_URL . 'views/user/recipe-search.php');
             }
         }
 
