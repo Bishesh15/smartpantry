@@ -1,292 +1,163 @@
 <?php
 /**
- * User Controller
- * Handles user preferences, favorites, and ratings
+ * UserController — Pantry, Favorites, Ratings, Profile actions
+ * Smart Pantry
  */
 
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
-require_once __DIR__ . '/../models/Rating.php';
 require_once __DIR__ . '/../models/User.php';
+require_once __DIR__ . '/../models/Rating.php';
 
 class UserController {
-    private $rating;
-    private $userModel;
+    private User   $userModel;
+    private Rating $ratingModel;
 
     public function __construct() {
-        $this->rating = new Rating();
-        $this->userModel = new User();
+        $this->userModel   = new User();
+        $this->ratingModel = new Rating();
     }
 
-    /**
-     * Add or update recipe rating
-     */
-    public function addRating() {
-        if (!isLoggedIn()) {
-            $_SESSION['error'] = 'Please login to rate recipes';
-            redirect(BASE_URL . 'views/user/login.php');
+    /* ── Pantry ─────────────────────────────────────────────── */
+
+    public function addToPantry(): void {
+        requireLogin();
+        $ingId = validateInteger($_POST['ingredient_id'] ?? 0, 1);
+        $qty   = max(0.1, (float)($_POST['quantity'] ?? 1));
+        if ($ingId === false) { flashError('Invalid ingredient.'); }
+        else {
+            $this->userModel->addToPantry($_SESSION['user_id'], $ingId, $qty)
+                ? flashSuccess('Ingredient added to your pantry.')
+                : flashError('Could not add ingredient.');
         }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-
-        // Verify CSRF token
-        if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
-            $_SESSION['error'] = 'Invalid security token';
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-
-        $recipe_id = validateInteger($_POST['recipe_id'] ?? 0, 1);
-        $rating = validateInteger($_POST['rating'] ?? 0, MIN_RATING, MAX_RATING);
-        $comment = sanitize($_POST['comment'] ?? '');
-
-        // Validate comment length
-        if (strlen($comment) > 1000) {
-            $_SESSION['error'] = 'Comment must be less than 1000 characters';
-            redirect(BASE_URL . 'views/user/recipe-detail.php?id=' . ($recipe_id ?: ''));
-        }
-
-        if ($recipe_id === false || $rating === false) {
-            $_SESSION['error'] = 'Invalid rating data. Please provide valid recipe ID and rating (1-5)';
-            redirect(BASE_URL . 'views/user/recipe-detail.php?id=' . ($recipe_id ?: ''));
-        }
-
-        $result = $this->rating->addRating($_SESSION['user_id'], $recipe_id, $rating, $comment);
-
-        if ($result['success']) {
-            $_SESSION['success'] = $result['message'];
-        } else {
-            $_SESSION['error'] = $result['message'];
-        }
-
-        redirect(BASE_URL . 'views/user/recipe-detail.php?id=' . $recipe_id);
+        redirect($_POST['redirect'] ?? BASE_URL . 'views/user/pantry.php');
     }
 
-    /**
-     * Add recipe to favorites
-     */
-    public function addFavorite() {
-        if (!isLoggedIn()) {
-            $_SESSION['error'] = 'Please login to save favorites';
-            redirect(BASE_URL . 'views/user/login.php');
+    public function removeFromPantry(): void {
+        requireLogin();
+        $ingId = validateInteger($_POST['ingredient_id'] ?? 0, 1);
+        if ($ingId === false) { flashError('Invalid ingredient.'); }
+        else {
+            $this->userModel->removeFromPantry($_SESSION['user_id'], $ingId)
+                ? flashSuccess('Ingredient removed.')
+                : flashError('Could not remove ingredient.');
         }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-
-        $recipe_id = validateInteger($_POST['recipe_id'] ?? 0, 1);
-
-        if ($recipe_id === false) {
-            $_SESSION['error'] = 'Invalid recipe ID';
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-
-        try {
-            $conn = getDB();
-            
-            // Check if already favorited
-            $query = "SELECT id FROM favorites 
-                      WHERE user_id = :user_id AND recipe_id = :recipe_id LIMIT 1";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(':user_id', $_SESSION['user_id'], PDO::PARAM_INT);
-            $stmt->bindParam(':recipe_id', $recipe_id, PDO::PARAM_INT);
-            $stmt->execute();
-
-            if ($stmt->rowCount() > 0) {
-                $_SESSION['info'] = 'Recipe already in favorites';
-            } else {
-                $query = "INSERT INTO favorites (user_id, recipe_id) 
-                          VALUES (:user_id, :recipe_id)";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(':user_id', $_SESSION['user_id'], PDO::PARAM_INT);
-                $stmt->bindParam(':recipe_id', $recipe_id, PDO::PARAM_INT);
-                $stmt->execute();
-                $_SESSION['success'] = 'Recipe added to favorites';
-            }
-        } catch (PDOException $e) {
-            error_log("Add Favorite Error: " . $e->getMessage());
-            $_SESSION['error'] = 'Failed to add to favorites';
-        }
-
-        $redirect_url = isset($_POST['redirect']) ? $_POST['redirect'] : BASE_URL . 'views/user/recipe-detail.php?id=' . $recipe_id;
-        redirect($redirect_url);
+        redirect($_POST['redirect'] ?? BASE_URL . 'views/user/pantry.php');
     }
 
-    /**
-     * Remove recipe from favorites
-     */
-    public function removeFavorite() {
-        if (!isLoggedIn()) {
-            redirect(BASE_URL . 'views/user/login.php');
+    public function clearPantry(): void {
+        requireLogin();
+        if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+            flashError('Security token mismatch.'); redirect(BASE_URL . 'views/user/pantry.php');
         }
-
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-
-        $recipe_id = validateInteger($_POST['recipe_id'] ?? 0, 1);
-
-        if ($recipe_id === false) {
-            $_SESSION['error'] = 'Invalid recipe ID';
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-
-        try {
-            $conn = getDB();
-            $query = "DELETE FROM favorites 
-                      WHERE user_id = :user_id AND recipe_id = :recipe_id";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(':user_id', $_SESSION['user_id'], PDO::PARAM_INT);
-            $stmt->bindParam(':recipe_id', $recipe_id, PDO::PARAM_INT);
-            $stmt->execute();
-            $_SESSION['success'] = 'Recipe removed from favorites';
-        } catch (PDOException $e) {
-            error_log("Remove Favorite Error: " . $e->getMessage());
-            $_SESSION['error'] = 'Failed to remove from favorites';
-        }
-
-        $redirect_url = isset($_POST['redirect']) ? $_POST['redirect'] : BASE_URL . 'views/user/recipe-detail.php?id=' . $recipe_id;
-        redirect($redirect_url);
+        $this->userModel->clearPantry($_SESSION['user_id']);
+        flashSuccess('Pantry cleared.');
+        redirect(BASE_URL . 'views/user/pantry.php');
     }
 
-    /**
-     * Check if recipe is favorited by user
-     * @param int $user_id
-     * @param int $recipe_id
-     * @return bool
-     */
-    public function isFavorited($user_id, $recipe_id) {
-        try {
-            $conn = getDB();
-            $query = "SELECT id FROM favorites 
-                      WHERE user_id = :user_id AND recipe_id = :recipe_id LIMIT 1";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $stmt->bindParam(':recipe_id', $recipe_id, PDO::PARAM_INT);
-            $stmt->execute();
-            return $stmt->rowCount() > 0;
-        } catch (PDOException $e) {
-            error_log("Check Favorite Error: " . $e->getMessage());
-            return false;
+    /* ── Favorites ──────────────────────────────────────────── */
+
+    public function addFavorite(): void {
+        requireLogin();
+        $recipeId = validateInteger($_POST['recipe_id'] ?? 0, 1);
+        if ($recipeId === false) { flashError('Invalid recipe.'); }
+        else {
+            $this->userModel->isFavorited($_SESSION['user_id'], $recipeId)
+                ? flashInfo('Already in your favorites.')
+                : ($this->userModel->addFavorite($_SESSION['user_id'], $recipeId)
+                    ? flashSuccess('Recipe saved to favorites!')
+                    : flashError('Could not save recipe.'));
         }
+        redirect($_POST['redirect'] ?? BASE_URL . 'views/user/recipe-detail.php?id=' . ($recipeId ?: ''));
     }
 
-    /**
-     * Update user preferences (dietary, food)
-     */
-    public function updatePreferences() {
-        if (!isLoggedIn()) {
-            redirect(BASE_URL . 'views/user/login.php');
+    public function removeFavorite(): void {
+        requireLogin();
+        $recipeId = validateInteger($_POST['recipe_id'] ?? 0, 1);
+        if ($recipeId === false) { flashError('Invalid recipe.'); }
+        else {
+            $this->userModel->removeFavorite($_SESSION['user_id'], $recipeId)
+                ? flashSuccess('Removed from favorites.')
+                : flashError('Could not remove.');
         }
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/dashboard.php');
-        }
-        if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
-            $_SESSION['error'] = 'Invalid security token';
-            redirect(BASE_URL . 'views/user/dashboard.php');
-        }
-
-        $food_prefs = isset($_POST['food_preferences']) ? implode(',', $_POST['food_preferences']) : '';
-        $dietary = isset($_POST['dietary_restrictions']) ? implode(',', $_POST['dietary_restrictions']) : '';
-
-        $food_prefs = sanitize($food_prefs);
-        $dietary = sanitize($dietary);
-
-        if ($this->userModel->updatePreferences($_SESSION['user_id'], $food_prefs, $dietary)) {
-            $_SESSION['success'] = 'Preferences updated successfully';
-        } else {
-            $_SESSION['error'] = 'Failed to update preferences';
-        }
-        redirect(BASE_URL . 'views/user/dashboard.php');
+        redirect($_POST['redirect'] ?? BASE_URL . 'views/user/favorites.php');
     }
 
-    /**
-     * Update username
-     */
-    public function updateUsername() {
-        if (!isLoggedIn()) {
-            redirect(BASE_URL . 'views/user/login.php');
-        }
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/dashboard.php');
-        }
-        if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
-            $_SESSION['error'] = 'Invalid security token';
-            redirect(BASE_URL . 'views/user/dashboard.php');
-        }
+    /* ── Ratings ────────────────────────────────────────────── */
 
-        $new_username = sanitize($_POST['new_username'] ?? '');
-        $result = $this->userModel->updateUsername($_SESSION['user_id'], $new_username);
-
-        if ($result['success']) {
-            $_SESSION['success'] = $result['message'];
-        } else {
-            $_SESSION['error'] = $result['message'];
+    public function addRating(): void {
+        requireLogin();
+        if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+            flashError('Security token mismatch.'); redirect(BASE_URL . 'views/user/recipe-search.php');
         }
-        redirect(BASE_URL . 'views/user/dashboard.php');
+        $recipeId = validateInteger($_POST['recipe_id'] ?? 0, 1);
+        $rating   = validateInteger($_POST['rating'] ?? 0, 1, 5);
+        $comment  = sanitize($_POST['comment'] ?? '');
+
+        if ($recipeId === false || $rating === false) {
+            flashError('Please select a star rating.');
+            redirect(BASE_URL . 'views/user/recipe-detail.php?id=' . ($_POST['recipe_id'] ?? ''));
+        }
+        $result = $this->ratingModel->addOrUpdate($_SESSION['user_id'], $recipeId, $rating, $comment);
+        $result['success'] ? flashSuccess($result['message']) : flashError($result['message']);
+        redirect(BASE_URL . 'views/user/recipe-detail.php?id=' . $recipeId);
     }
 
-    /**
-     * Update password
-     */
-    public function updatePassword() {
-        if (!isLoggedIn()) {
-            redirect(BASE_URL . 'views/user/login.php');
-        }
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/dashboard.php');
-        }
-        if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
-            $_SESSION['error'] = 'Invalid security token';
-            redirect(BASE_URL . 'views/user/dashboard.php');
-        }
+    /* ── Profile ────────────────────────────────────────────── */
 
-        $current_password = $_POST['current_password'] ?? '';
-        $new_password = $_POST['new_password'] ?? '';
-
-        if (empty($current_password) || empty($new_password)) {
-            $_SESSION['error'] = 'Both current and new passwords are required';
-            redirect(BASE_URL . 'views/user/dashboard.php');
+    public function updateProfile(): void {
+        requireLogin();
+        if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+            flashError('Security token mismatch.'); redirect(BASE_URL . 'views/user/profile.php');
         }
+        $fp = is_array($_POST['food_preferences'] ?? null)
+            ? implode(',', $_POST['food_preferences'])
+            : '';
+        $dr = is_array($_POST['dietary_restrictions'] ?? null)
+            ? implode(',', $_POST['dietary_restrictions'])
+            : '';
 
-        $result = $this->userModel->updatePassword($_SESSION['user_id'], $current_password, $new_password);
+        $result = $this->userModel->updateProfile($_SESSION['user_id'], [
+            'full_name'            => $_POST['full_name']        ?? '',
+            'food_preferences'     => $fp,
+            'dietary_restrictions' => $dr,
+            'daily_calorie_goal'   => $_POST['daily_calorie_goal'] ?? 2000,
+        ]);
+        $result['success'] ? flashSuccess($result['message']) : flashError($result['message']);
+        redirect(BASE_URL . 'views/user/profile.php');
+    }
 
-        if ($result['success']) {
-            $_SESSION['success'] = $result['message'];
-        } else {
-            $_SESSION['error'] = $result['message'];
+    public function updatePassword(): void {
+        requireLogin();
+        if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+            flashError('Security token mismatch.'); redirect(BASE_URL . 'views/user/profile.php');
         }
-        redirect(BASE_URL . 'views/user/dashboard.php');
+        if (($_POST['new_password'] ?? '') !== ($_POST['confirm_password'] ?? '')) {
+            flashError('New passwords do not match.');
+            redirect(BASE_URL . 'views/user/profile.php');
+        }
+        $result = $this->userModel->updatePassword(
+            $_SESSION['user_id'],
+            $_POST['current_password'] ?? '',
+            $_POST['new_password']     ?? ''
+        );
+        $result['success'] ? flashSuccess($result['message']) : flashError($result['message']);
+        redirect(BASE_URL . 'views/user/profile.php');
     }
 }
 
-// Handle requests
+/* ── Route ──────────────────────────────────────────────────── */
+$ctrl = new UserController();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    $controller = new UserController();
-    
-    switch ($_POST['action']) {
-        case 'add_rating':
-            $controller->addRating();
-            break;
-        case 'add_favorite':
-            $controller->addFavorite();
-            break;
-        case 'remove_favorite':
-            $controller->removeFavorite();
-            break;
-        case 'update_preferences':
-            $controller->updatePreferences();
-            break;
-        case 'update_username':
-            $controller->updateUsername();
-            break;
-        case 'update_password':
-            $controller->updatePassword();
-            break;
-        default:
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-    }
+    match ($_POST['action']) {
+        'add_to_pantry'     => $ctrl->addToPantry(),
+        'remove_from_pantry'=> $ctrl->removeFromPantry(),
+        'clear_pantry'      => $ctrl->clearPantry(),
+        'add_favorite'      => $ctrl->addFavorite(),
+        'remove_favorite'   => $ctrl->removeFavorite(),
+        'add_rating'        => $ctrl->addRating(),
+        'update_profile'    => $ctrl->updateProfile(),
+        'update_password'   => $ctrl->updatePassword(),
+        default             => redirect(BASE_URL . 'views/user/dashboard.php'),
+    };
 }
-

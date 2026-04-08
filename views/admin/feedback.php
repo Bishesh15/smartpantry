@@ -1,131 +1,112 @@
 <?php
-$page_title = 'Manage Feedback';
-require_once __DIR__ . '/../includes/admin-header.php';
+$page_title = 'Feedback';
+require_once __DIR__ . '/../../includes/session.php';
 require_once __DIR__ . '/../../includes/functions.php';
+require_once __DIR__ . '/../../config/constants.php';
 require_once __DIR__ . '/../../models/Feedback.php';
 
-// Require admin login - redirect if not logged in
-if (!isAdmin() && !isLoggedIn()) {
-    redirect(BASE_URL . 'views/admin/login.php');
-}
-// If user tries to access, show error but allow viewing
-if (isLoggedIn() && !isAdmin()) {
-    $_SESSION['error'] = 'You are logged in as a regular user. This is an admin-only page. Please logout first to access admin panel.';
-}
+require_once __DIR__ . '/../includes/admin-header.php';
 
-$feedback = new Feedback();
-
-$action = isset($_GET['action']) ? $_GET['action'] : 'list';
-$feedback_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-
-$all_feedback = $feedback->getAll(null, 100);
-$current_feedback = null;
-
-if ($action === 'respond' && $feedback_id > 0) {
-    $current_feedback = $feedback->getById($feedback_id);
-}
+$feedbackModel  = new Feedback();
+$filterStatus   = sanitize($_GET['status'] ?? '');
+$allFeedback    = $feedbackModel->getAll($filterStatus, 50, 0);
+$totalPending   = $feedbackModel->getTotalCount('pending');
+$totalResponded = $feedbackModel->getTotalCount('responded');
+$totalResolved  = $feedbackModel->getTotalCount('resolved');
 ?>
 
-<div class="container">
-    <div class="admin-page">
-        <div class="admin-header">
-            <h1>Manage Feedback</h1>
-            <a href="<?php echo BASE_URL; ?>views/admin/dashboard.php" class="btn btn-secondary">Back to Dashboard</a>
+<!-- Summary -->
+<div class="row g-3 mb-4">
+  <?php foreach ([['Pending',$totalPending,'badge-pending','bi-hourglass-split'],['Responded',$totalResponded,'badge-veg','bi-chat-right-check'],['Resolved',$totalResolved,'badge-resolved','bi-check-circle']] as [$label,$count,$cls,$icon]): ?>
+    <div class="col-4">
+      <a href="?status=<?= strtolower($label) ?>" class="text-decoration-none">
+        <div class="admin-stat-card" style="cursor:pointer;">
+          <div class="admin-stat-icon <?= $cls ?>" style="width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;">
+            <i class="bi <?= $icon ?>"></i>
+          </div>
+          <div>
+            <div class="admin-stat-val"><?= $count ?></div>
+            <div class="admin-stat-label"><?= $label ?></div>
+          </div>
         </div>
-
-        <?php if ($action === 'respond' && $current_feedback): ?>
-            <!-- Respond to Feedback -->
-            <div class="admin-form-container">
-                <h2>Respond to Feedback</h2>
-                
-                <div class="feedback-view">
-                    <div class="feedback-item">
-                        <p><strong>From:</strong> <?php echo htmlspecialchars($current_feedback['name']); ?> 
-                           (<?php echo htmlspecialchars($current_feedback['email']); ?>)</p>
-                        <?php if ($current_feedback['username']): ?>
-                            <p><strong>Username:</strong> <?php echo htmlspecialchars($current_feedback['username']); ?></p>
-                        <?php endif; ?>
-                        <p><strong>Date:</strong> <?php echo formatDateTime($current_feedback['created_at']); ?></p>
-                        <p><strong>Status:</strong> <?php echo htmlspecialchars($current_feedback['status']); ?></p>
-                        <div class="feedback-message">
-                            <strong>Message:</strong>
-                            <p><?php echo nl2br(htmlspecialchars($current_feedback['message'])); ?></p>
-                        </div>
-                        <?php if ($current_feedback['admin_response']): ?>
-                            <div class="feedback-response">
-                                <strong>Previous Response:</strong>
-                                <p><?php echo nl2br(htmlspecialchars($current_feedback['admin_response'])); ?></p>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <form method="POST" action="<?php echo BASE_URL; ?>controllers/AdminController.php" class="admin-form">
-                    <input type="hidden" name="action" value="respond_feedback">
-                    <input type="hidden" name="feedback_id" value="<?php echo $feedback_id; ?>">
-
-                    <div class="form-group">
-                        <label>Admin Response *</label>
-                        <textarea name="admin_response" rows="6" required><?php echo $current_feedback['admin_response'] ? htmlspecialchars($current_feedback['admin_response']) : ''; ?></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Status</label>
-                        <select name="status">
-                            <option value="pending" <?php echo ($current_feedback['status'] === 'pending') ? 'selected' : ''; ?>>Pending</option>
-                            <option value="responded" <?php echo ($current_feedback['status'] === 'responded') ? 'selected' : ''; ?>>Responded</option>
-                            <option value="resolved" <?php echo ($current_feedback['status'] === 'resolved') ? 'selected' : ''; ?>>Resolved</option>
-                        </select>
-                    </div>
-
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">Save Response</button>
-                        <a href="<?php echo BASE_URL; ?>views/admin/feedback.php" class="btn btn-secondary">Cancel</a>
-                    </div>
-                </form>
-            </div>
-        <?php else: ?>
-            <!-- Feedback List -->
-            <div class="admin-table-container">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Message</th>
-                            <th>Status</th>
-                            <th>Date</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($all_feedback as $fb): ?>
-                            <tr>
-                                <td><?php echo $fb['id']; ?></td>
-                                <td><?php echo htmlspecialchars($fb['name']); ?></td>
-                                <td><?php echo htmlspecialchars($fb['email']); ?></td>
-                                <td><?php echo truncate($fb['message'], 50); ?></td>
-                                <td>
-                                    <span class="status-badge status-<?php echo $fb['status']; ?>">
-                                        <?php echo htmlspecialchars($fb['status']); ?>
-                                    </span>
-                                </td>
-                                <td><?php echo formatDate($fb['created_at']); ?></td>
-                                <td>
-                                    <a href="<?php echo BASE_URL; ?>views/admin/feedback.php?action=respond&id=<?php echo $fb['id']; ?>" class="btn btn-small">Respond</a>
-                                    <a href="<?php echo BASE_URL; ?>controllers/AdminController.php?action=delete_feedback&id=<?php echo $fb['id']; ?>" 
-                                       class="btn btn-small btn-danger" 
-                                       onclick="return confirm('Are you sure you want to delete this feedback?');">Delete</a>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
+      </a>
     </div>
+  <?php endforeach; ?>
 </div>
 
-<?php require_once __DIR__ . '/../includes/admin-footer.php'; ?>
+<div class="d-flex gap-2 mb-3 flex-wrap">
+  <a href="?" class="btn btn-sm <?= !$filterStatus ? 'btn-success' : 'btn-outline-secondary' ?> rounded-3">All</a>
+  <?php foreach (['pending','responded','resolved'] as $s): ?>
+    <a href="?status=<?= $s ?>" class="btn btn-sm <?= $filterStatus === $s ? 'btn-success' : 'btn-outline-secondary' ?> rounded-3"><?= ucfirst($s) ?></a>
+  <?php endforeach; ?>
+</div>
 
+<!-- Feedback List -->
+<?php if (empty($allFeedback)): ?>
+  <div class="admin-card p-5 text-center text-muted">
+    <i class="bi bi-inbox" style="font-size:3rem;opacity:.3;"></i>
+    <h5 class="mt-3">No feedback found.</h5>
+  </div>
+<?php else: ?>
+  <?php foreach ($allFeedback as $f): ?>
+    <div class="feedback-card">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+        <div>
+          <strong><?= htmlspecialchars($f['name']) ?></strong>
+          <span class="text-muted ms-2 small"><?= htmlspecialchars($f['email']) ?></span>
+          <?php if ($f['username']): ?>
+            <span class="badge bg-light text-dark border ms-2" style="font-size:.7rem;">
+              @<?= htmlspecialchars($f['username']) ?>
+            </span>
+          <?php endif; ?>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge <?= $f['status'] === 'pending' ? 'badge-pending' : ($f['status'] === 'resolved' ? 'badge-resolved' : 'badge-veg') ?> rounded-pill">
+            <?= ucfirst($f['status']) ?>
+          </span>
+          <small class="text-muted"><?= timeAgo($f['created_at']) ?></small>
+          <a href="<?= BASE_URL ?>controllers/AdminController.php?action=delete_feedback&id=<?= $f['id'] ?>"
+             class="btn-admin-danger btn-sm"
+             data-confirm="Delete this feedback?">
+            <i class="bi bi-trash"></i>
+          </a>
+        </div>
+      </div>
+      <p class="mb-2" style="font-size:.9rem;"><?= htmlspecialchars($f['message']) ?></p>
+
+      <?php if ($f['admin_response']): ?>
+        <div class="bg-light rounded p-2 mb-2" style="font-size:.82rem;border-left:3px solid #16a34a;">
+          <strong class="text-success">Admin reply:</strong>
+          <?= htmlspecialchars($f['admin_response']) ?>
+        </div>
+      <?php endif; ?>
+
+      <!-- Response Form -->
+      <?php if ($f['status'] !== 'resolved'): ?>
+        <form method="POST" action="<?= BASE_URL ?>controllers/AdminController.php" class="mt-2">
+          <input type="hidden" name="action" value="respond_feedback">
+          <input type="hidden" name="feedback_id" value="<?= $f['id'] ?>">
+          <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+          <div class="d-flex gap-2 align-items-start">
+            <textarea name="admin_response" class="admin-input" rows="2"
+                      placeholder="Type your response…"
+                      style="flex:1;"><?= htmlspecialchars($f['admin_response'] ?? '') ?></textarea>
+            <div class="d-flex flex-column gap-1">
+              <select name="status" class="admin-input" style="min-width:130px;padding:.4rem .6rem;">
+                <option value="responded">Mark as Responded</option>
+                <option value="resolved">Mark as Resolved</option>
+              </select>
+              <button type="submit" class="btn-admin-primary">
+                <i class="bi bi-send me-1"></i>Send
+              </button>
+            </div>
+          </div>
+        </form>
+      <?php else: ?>
+        <span class="badge badge-resolved rounded-pill"><i class="bi bi-check-circle me-1"></i>Resolved</span>
+      <?php endif; ?>
+    </div>
+  <?php endforeach; ?>
+<?php endif; ?>
+
+<?php require_once __DIR__ . '/../includes/admin-footer.php'; ?>

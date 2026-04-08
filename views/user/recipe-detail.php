@@ -1,544 +1,502 @@
 <?php
-$page_title = 'Recipe Details';
+$page_title = 'Recipe Detail';
 require_once __DIR__ . '/../../includes/session.php';
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../config/constants.php';
 require_once __DIR__ . '/../../controllers/RecipeController.php';
-require_once __DIR__ . '/../../controllers/UserController.php';
+require_once __DIR__ . '/../../models/Rating.php';
 
-// Require user login
-if (!isLoggedIn()) {
-    redirect(BASE_URL . 'views/user/login.php');
-}
+$recipe_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($recipe_id <= 0) redirect(BASE_URL . 'views/user/recipe-search.php');
 
-$recipe_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-
-if ($recipe_id <= 0) {
-    $_SESSION['error'] = 'Invalid recipe';
-    redirect(BASE_URL . 'views/user/recipe-search.php');
-}
-
-$recipeController = new RecipeController();
-$userController = new UserController();
-
-$recipe = $recipeController->viewDetail($recipe_id);
-
+$ctrl   = new RecipeController();
+$recipe = $ctrl->viewDetail($recipe_id);
 if (!$recipe) {
-    $_SESSION['error'] = 'Recipe not found';
+    flashError('Recipe not found.');
     redirect(BASE_URL . 'views/user/recipe-search.php');
 }
 
-// Check if recipe is favorited
-$is_favorited = false;
-$user_rating = null;
-if (isLoggedIn() && isset($_SESSION['user_id'])) {
-    $is_favorited = $userController->isFavorited($_SESSION['user_id'], $recipe_id);
-    require_once __DIR__ . '/../../models/Rating.php';
-    $ratingModel = new Rating();
-    $user_rating = $ratingModel->getUserRating($_SESSION['user_id'], $recipe_id);
+// Nutrition estimates
+$cals    = (float) $recipe['calories'];
+$protein = round($cals * 0.25 / 4);
+$carbs   = round($cals * 0.50 / 4);
+$fat     = round($cals * 0.25 / 9);
+$goal    = isLoggedIn() ? ($_SESSION['daily_calorie_goal'] ?? 2000) : 2000;
+$pctDay  = min(100, round(($cals / $goal) * 100));
+
+// Base values for calculator
+$baseServings = $recipe['servings'] ?? 2;
+
+// User rating
+$ratingModel = new Rating();
+$userRating  = isLoggedIn() ? $ratingModel->getUserRating($_SESSION['user_id'], $recipe_id) : null;
+$allRatings  = $ratingModel->getRecipeRatings($recipe_id, 10);
+
+// Ingredients (with in_pantry flag set by RecipeController::viewDetail)
+$ingredients = $recipe['ingredients'] ?? [];
+$similar     = $recipe['similar']     ?? [];
+
+// Check if favorited
+$isFav = false;
+if (isLoggedIn()) {
+    require_once __DIR__ . '/../../models/User.php';
+    $userModel = new User();
+    $isFav     = $userModel->isFavorited($_SESSION['user_id'], $recipe_id);
 }
 
-// Get similar recipes (same category, excluding current)
-$recipeModel = new Recipe();
-$similar_recipes = $recipeModel->getAll(20);
-$similar_recipes = array_filter($similar_recipes, function($r) use ($recipe) {
-    return $r['id'] != $recipe['id'] && $r['category'] === $recipe['category'];
-});
-$similar_recipes = array_slice($similar_recipes, 0, 4);
-
-// If not enough similar, fill with other recipes
-if (count($similar_recipes) < 4) {
-    $other = array_filter($recipeModel->getAll(20), function($r) use ($recipe, $similar_recipes) {
-        $similar_ids = array_column($similar_recipes, 'id');
-        return $r['id'] != $recipe['id'] && !in_array($r['id'], $similar_ids);
-    });
-    $similar_recipes = array_merge($similar_recipes, array_slice($other, 0, 4 - count($similar_recipes)));
-}
-
-// Parse instructions into steps
-$raw_instructions = $recipe['instructions'];
-$steps = [];
-// Try splitting by numbered patterns like "1." "2." etc.
-if (preg_match('/\d+\.\s/', $raw_instructions)) {
-    $parts = preg_split('/(?=\d+\.\s)/', $raw_instructions, -1, PREG_SPLIT_NO_EMPTY);
-    foreach ($parts as $part) {
-        $clean = preg_replace('/^\d+\.\s*/', '', trim($part));
-        if (!empty($clean)) {
-            // Try to extract a title (first sentence or line)
-            $lines = preg_split('/\n/', $clean, 2);
-            if (count($lines) > 1 && strlen($lines[0]) < 60) {
-                $steps[] = ['title' => trim($lines[0]), 'body' => trim($lines[1])];
-            } else {
-                $steps[] = ['title' => '', 'body' => trim($clean)];
-            }
-        }
-    }
-} else {
-    // Split by double newline or single newline
-    $parts = preg_split('/\n\s*\n|\n/', $raw_instructions, -1, PREG_SPLIT_NO_EMPTY);
-    foreach ($parts as $part) {
-        $clean = trim($part);
-        if (!empty($clean)) {
-            $steps[] = ['title' => '', 'body' => $clean];
-        }
-    }
-}
-if (empty($steps)) {
-    $steps[] = ['title' => '', 'body' => $raw_instructions];
-}
-
-// Estimate nutrition (protein, carbs, fat, fiber) from calories
-$cals = floatval($recipe['calories']);
-$est_protein = round($cals * 0.25 / 4); // 25% from protein
-$est_carbs = round($cals * 0.45 / 4);   // 45% from carbs
-$est_fat = round($cals * 0.30 / 9);     // 30% from fat
-$est_fiber = round($cals * 0.02 / 2);   // rough estimate
-
-// Servings estimate (based on calories for ~400 cal serving)
-$servings = max(1, round($cals / 400));
-if ($servings < 1) $servings = 4;
+$page_title = $recipe['name'];
+require_once __DIR__ . '/../includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($recipe['name']); ?> - SmartPantry</title>
-    <link rel="stylesheet" href="<?php echo ASSETS_PATH; ?>css/landing.css">
-    <link rel="stylesheet" href="<?php echo ASSETS_PATH; ?>css/recipe-detail.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-</head>
-<body>
 
-<!-- Navigation (same as landing) -->
-<nav class="landing-nav">
-    <div class="nav-container">
-        <a href="<?php echo BASE_URL; ?>" class="nav-logo">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <rect width="24" height="24" rx="4" fill="#22c55e"/>
-                <path d="M7 12l3 3 7-7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>SmartPantry</span>
-        </a>
-        <form method="POST" action="<?php echo BASE_URL; ?>controllers/RecipeController.php" class="nav-search-bar">
-            <input type="hidden" name="action" value="search">
-            <svg class="nav-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-            </svg>
-            <input type="text" name="search" placeholder="Search recipes or ingredients..." class="nav-search-input">
-            <button type="submit" class="nav-search-btn">Search</button>
-        </form>
-        <div class="nav-actions">
-            <a href="<?php echo BASE_URL; ?>views/user/dashboard.php" class="nav-user-icon" title="<?php echo htmlspecialchars($_SESSION['username']); ?>">
-                <?php echo strtoupper(substr($_SESSION['username'], 0, 1)); ?>
-            </a>
-            <a href="<?php echo BASE_URL; ?>views/user/recipe-search.php" class="btn-nav-primary">Find Recipes</a>
-            <a href="<?php echo BASE_URL; ?>controllers/AuthController.php?action=logout" class="btn-nav-outline">Logout</a>
+<div class="container-xl py-4" style="margin-top:10px;">
+  <div class="row g-4">
+    <!-- ── Main Content ─────────────────────────────────────── -->
+    <div class="col-lg-8">
+
+      <!-- Breadcrumb -->
+      <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+          <li class="breadcrumb-item"><a href="<?= BASE_URL ?>views/user/home.php">Home</a></li>
+          <li class="breadcrumb-item"><a href="<?= BASE_URL ?>views/user/recipe-search.php">Recipes</a></li>
+          <li class="breadcrumb-item active"><?= htmlspecialchars($recipe['name']) ?></li>
+        </ol>
+      </nav>
+
+      <!-- Header -->
+      <div class="mb-4">
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <span class="badge <?= dietBadgeClass($recipe['diet_type']) ?> px-3 py-2" style="font-size:.85rem;">
+            <?= dietBadgeIcon($recipe['diet_type']) ?> <?= htmlspecialchars($recipe['diet_type']) ?>
+          </span>
+          <span class="badge bg-light text-dark px-3 py-2" style="font-size:.85rem;">
+            <?= htmlspecialchars($recipe['category']) ?>
+          </span>
         </div>
-        <button class="mobile-menu-btn" id="mobileMenuBtn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
-        </button>
-    </div>
-</nav>
+        <h1 class="fw-black mb-3" style="font-size:2.5rem;"><?= htmlspecialchars($recipe['name']) ?></h1>
+        <p class="lead text-muted"><?= htmlspecialchars($recipe['description'] ?? '') ?></p>
+      </div>
 
-<!-- Breadcrumb -->
-<div class="rd-breadcrumb">
-    <div class="rd-container">
-        <a href="<?php echo BASE_URL; ?>views/user/home.php">Home</a>
-        <span>&rsaquo;</span>
-        <a href="<?php echo BASE_URL; ?>views/user/recipe-search.php">Recipes</a>
-        <span>&rsaquo;</span>
-        <span class="current"><?php echo htmlspecialchars($recipe['name']); ?></span>
+      <!-- Hero Image -->
+      <img src="<?= resolveImageUrl($recipe['image_url'] ?? '') ?>"
+           class="recipe-detail-hero mb-4 w-100"
+           alt="<?= htmlspecialchars($recipe['name']) ?>"
+           onerror="this.src='<?= ASSETS_PATH ?>images/default-recipes.jpg'">
+
+      <!-- Quick Stats -->
+      <div class="row g-3 mb-4">
+        <div class="col-3">
+          <div class="sp-card p-3 text-center">
+            <i class="bi bi-clock-fill text-success d-block mb-1" style="font-size:1.5rem;"></i>
+            <div class="fw-black"><?= $recipe['prep_time'] ?> <small class="fw-normal">min</small></div>
+            <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;">Prep Time</div>
+          </div>
+        </div>
+        <div class="col-3">
+          <div class="sp-card p-3 text-center">
+            <i class="bi bi-people-fill text-primary d-block mb-1" style="font-size:1.5rem;"></i>
+            <div class="d-flex align-items-center justify-content-center gap-2">
+                <button class="btn btn-sm p-0 text-primary" id="servings-dec" style="border:0;background:none;"><i class="bi bi-dash-circle-fill"></i></button>
+                <div class="fw-black" id="servings-val" data-base="<?= $baseServings ?>"><?= $baseServings ?></div>
+                <button class="btn btn-sm p-0 text-primary" id="servings-inc" style="border:0;background:none;"><i class="bi bi-plus-circle-fill"></i></button>
+            </div>
+            <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;">Servings</div>
+          </div>
+        </div>
+        <div class="col-3">
+          <div class="sp-card p-3 text-center">
+            <i class="bi bi-fire text-warning d-block mb-1" style="font-size:1.5rem;"></i>
+            <div class="fw-black" id="total-cals" data-base="<?= $cals ?>"><?= number_format($cals) ?></div>
+            <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;">Calories</div>
+          </div>
+        </div>
+        <div class="col-3">
+          <div class="sp-card p-3 text-center">
+            <i class="bi bi-star-fill text-warning d-block mb-1" style="font-size:1.5rem;"></i>
+            <div class="fw-black"><?= number_format($recipe['average_rating'], 1) ?></div>
+            <div class="text-muted" style="font-size:.7rem;text-transform:uppercase;"><?= $recipe['total_ratings'] ?> Ratings</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ingredients -->
+      <div class="sp-card p-4 mb-4">
+        <h3 class="fw-black mb-3 d-flex align-items-center gap-2">
+          <i class="bi bi-basket-fill text-success"></i> Ingredients
+        </h3>
+        <?php if (isLoggedIn()): ?>
+          <p class="text-muted small mb-3">
+            <span class="text-success fw-bold">✓ Green = In your pantry</span> &nbsp;|&nbsp;
+            <span class="text-danger fw-bold">✗ Red = Missing</span>
+            — click to check off as you cook
+          </p>
+        <?php endif; ?>
+        <div class="row g-0">
+          <?php foreach ($ingredients as $ing): ?>
+            <div class="col-sm-6">
+              <div class="ing-list-item">
+                <?php if (isLoggedIn()): ?>
+                  <div class="ing-check <?= $ing['in_pantry'] ? 'have' : '' ?>"
+                       title="<?= $ing['in_pantry'] ? 'In your pantry' : 'Not in pantry' ?>">
+                    <?php if ($ing['in_pantry']): ?>
+                      <i class="bi bi-check text-white" style="font-size:.75rem;"></i>
+                    <?php endif; ?>
+                  </div>
+                  <span class="<?= $ing['in_pantry'] ? 'text-success fw-bold' : 'text-danger' ?>">
+                    <span class="calc-qty" data-base="<?= $ing['quantity'] ?>"><?= htmlspecialchars(number_format($ing['quantity'], $ing['quantity'] == floor($ing['quantity']) ? 0 : 1)) ?></span>
+                    <?= htmlspecialchars($ing['unit']) ?>
+                    <?= htmlspecialchars($ing['name']) ?>
+                  </span>
+                  <?php if (!$ing['in_pantry']): ?>
+                    <?php $subs = getIngredientSubstitutes($ing['name']); ?>
+                    <?php if (!empty($subs)): ?>
+                      <div class="sub-icon" data-bs-toggle="popover" data-bs-trigger="hover" 
+                           title="Substitutions for <?= htmlspecialchars($ing['name']) ?>" 
+                           data-bs-content="<div class='small'><?php foreach($subs as $s) echo '• '.htmlspecialchars($s).'<br>'; ?></div>" 
+                           data-bs-html="true">
+                        <i class="bi bi-arrow-left-right"></i>
+                      </div>
+                    <?php endif; ?>
+                  <?php endif; ?>
+                <?php else: ?>
+                  <div class="ing-check"></div>
+                  <span>
+                    <span class="calc-qty" data-base="<?= $ing['quantity'] ?>"><?= htmlspecialchars(number_format($ing['quantity'], $ing['quantity'] == floor($ing['quantity']) ? 0 : 1)) ?></span>
+                    <?= htmlspecialchars($ing['unit']) ?>
+                    <strong><?= htmlspecialchars($ing['name']) ?></strong>
+                  </span>
+                <?php endif; ?>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+        <?php if (!isLoggedIn()): ?>
+          <div class="alert alert-light border mt-3 small">
+            <i class="bi bi-info-circle me-1 text-success"></i>
+            <a href="<?= BASE_URL ?>views/user/login.php" class="fw-bold">Log in</a>
+            to see which ingredients you already have highlighted in green.
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <!-- Instructions -->
+      <div class="sp-card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <h3 class="fw-black mb-0 d-flex align-items-center gap-2">
+            <i class="bi bi-list-ol text-success"></i> Instructions
+          </h3>
+          <button class="btn btn-sp-primary" id="btn-start-cooking">
+            <i class="bi bi-play-fill"></i> Start Cooking
+          </button>
+        </div>
+        <?php
+        $steps    = array_filter(array_map('trim', explode("\n", $recipe['instructions'])));
+        $stepNum  = 1;
+        ?>
+        <?php foreach ($steps as $step): ?>
+          <div class="step-item">
+            <div class="step-num"><?= $stepNum++ ?></div>
+            <div class="mt-1" style="line-height:1.7;color:#334155;">
+              <?= htmlspecialchars($step) ?>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+
+      <!-- Actions: Favorite -->
+      <div class="d-flex gap-3 mb-4 flex-wrap">
+        <?php if (isLoggedIn()): ?>
+          <form method="POST" action="<?= BASE_URL ?>controllers/UserController.php">
+            <input type="hidden" name="action" value="<?= $isFav ? 'remove_favorite' : 'add_favorite' ?>">
+            <input type="hidden" name="recipe_id" value="<?= $recipe_id ?>">
+            <input type="hidden" name="redirect" value="<?= BASE_URL ?>views/user/recipe-detail.php?id=<?= $recipe_id ?>">
+            <button type="submit"
+                    class="btn <?= $isFav ? 'btn-danger' : 'btn-outline-danger' ?> fw-bold rounded-3">
+              <i class="bi bi-heart<?= $isFav ? '-fill' : '' ?> me-1"></i>
+              <?= $isFav ? 'Remove from Favorites' : 'Save to Favorites' ?>
+            </button>
+          </form>
+        <?php else: ?>
+          <a href="<?= BASE_URL ?>views/user/login.php" class="btn btn-outline-secondary rounded-3">
+            <i class="bi bi-heart me-1"></i> Login to Save
+          </a>
+        <?php endif; ?>
+        <a href="<?= BASE_URL ?>views/user/recipe-search.php" class="btn btn-outline-success rounded-3">
+          <i class="bi bi-arrow-left me-1"></i> Back to Recipes
+        </a>
+      </div>
+
+      <!-- Ratings -->
+      <?php if (isLoggedIn()): ?>
+      <div class="sp-card p-4 mb-4">
+        <h4 class="fw-black mb-3"><i class="bi bi-star-fill text-warning me-2"></i>Rate This Recipe</h4>
+        <form method="POST" action="<?= BASE_URL ?>controllers/UserController.php">
+          <input type="hidden" name="action" value="add_rating">
+          <input type="hidden" name="recipe_id" value="<?= $recipe_id ?>">
+          <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+          <div class="star-group mb-3" style="display:flex;gap:.5rem;flex-direction:row-reverse;justify-content:flex-end;">
+            <?php for ($i = 5; $i >= 1; $i--): ?>
+              <input type="radio" name="rating" id="star<?= $i ?>" value="<?= $i ?>"
+                     <?= ($userRating && $userRating['rating'] == $i) ? 'checked' : '' ?>>
+              <label for="star<?= $i ?>" class="rating-star" data-value="<?= $i ?>"
+                     style="font-size:2rem;color:<?= ($userRating && $userRating['rating'] >= $i) ? '#fbbf24' : '#e2e8f0' ?>;cursor:pointer;">★</label>
+            <?php endfor; ?>
+          </div>
+          <textarea name="comment" rows="3" class="sp-form-control mb-3"
+                    placeholder="Share your experience with this recipe…"><?= htmlspecialchars($userRating['comment'] ?? '') ?></textarea>
+          <button type="submit" class="btn-sp-primary">
+            <i class="bi bi-send-fill me-1"></i> Submit Rating
+          </button>
+        </form>
+      </div>
+      <?php endif; ?>
+
+      <!-- Reviews -->
+      <?php if (!empty($allRatings)): ?>
+      <div class="sp-card p-4 mb-4">
+        <h4 class="fw-black mb-3">Community Reviews (<?= count($allRatings) ?>)</h4>
+        <?php foreach ($allRatings as $rev): ?>
+          <div class="d-flex gap-3 mb-3 pb-3 border-bottom">
+            <div class="rounded-circle bg-success d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
+                 style="width:40px;height:40px;font-size:.9rem;">
+              <?= strtoupper(substr($rev['username'] ?? 'U', 0, 1)) ?>
+            </div>
+            <div>
+              <div class="d-flex align-items-center gap-2 mb-1">
+                <strong><?= htmlspecialchars($rev['username'] ?? 'User') ?></strong>
+                <span style="color:#fbbf24;"><?= str_repeat('★', $rev['rating']) ?><?= str_repeat('☆', 5 - $rev['rating']) ?></span>
+                <small class="text-muted"><?= timeAgo($rev['created_at']) ?></small>
+              </div>
+              <?php if ($rev['comment']): ?>
+                <p class="mb-0 text-muted small"><?= htmlspecialchars($rev['comment']) ?></p>
+              <?php endif; ?>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
     </div>
+
+    <!-- ── Sidebar: Nutrition + Similar ─────────────────────── -->
+    <div class="col-lg-4">
+
+      <!-- Nutrition Card -->
+      <div class="nutrition-sidebar mb-4">
+        <h4 class="text-white fw-black mb-4 text-center">Nutrition Facts</h4>
+        <!-- Gauge -->
+        <div style="position:relative;width:140px;height:140px;margin:0 auto 1.5rem;">
+          <svg width="140" height="140" style="transform:rotate(-90deg);">
+            <circle cx="70" cy="70" r="58" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="10"></circle>
+            <circle cx="70" cy="70" r="58" fill="none" stroke="#16a34a" stroke-width="10"
+                    stroke-linecap="round"
+                    stroke-dasharray="<?= 2 * M_PI * 58 ?>"
+                    stroke-dashoffset="<?= 2 * M_PI * 58 * (1 - $pctDay/100) ?>"
+                    style="transition:stroke-dashoffset 1s ease;"></circle>
+          </svg>
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">
+            <div style="font-size:1.5rem;font-weight:900;" id="goal-pct"><?= $pctDay ?>%</div>
+            <div style="font-size:.6rem;color:#94a3b8;text-transform:uppercase;">Daily Goal</div>
+          </div>
+        </div>
+        <div class="text-center mb-4">
+          <div style="font-size:2.2rem;font-weight:900;color:#16a34a;" id="side-cals"><?= number_format($cals) ?></div>
+          <div style="font-size:.72rem;color:#94a3b8;text-transform:uppercase;">Calories per Serving</div>
+        </div>
+        <div class="row g-2 text-center">
+          <div class="col-4">
+            <div style="background:rgba(255,255,255,.05);padding:.75rem;border-radius:12px;">
+              <div style="font-size:1.2rem;font-weight:900;color:#16a34a;" id="calc-protein" data-base="<?= $protein ?>"><?= $protein ?>g</div>
+              <div style="font-size:.6rem;color:#94a3b8;">Protein</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div style="background:rgba(255,255,255,.05);padding:.75rem;border-radius:12px;">
+              <div style="font-size:1.2rem;font-weight:900;color:#3b82f6;" id="calc-carbs" data-base="<?= $carbs ?>"><?= $carbs ?>g</div>
+              <div style="font-size:.6rem;color:#94a3b8;">Carbs</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div style="background:rgba(255,255,255,.05);padding:.75rem;border-radius:12px;">
+              <div style="font-size:1.2rem;font-weight:900;color:#f59e0b;" id="calc-fat" data-base="<?= $fat ?>"><?= $fat ?>g</div>
+              <div style="font-size:.6rem;color:#94a3b8;">Fat</div>
+            </div>
+          </div>
+        </div>
+        <p class="text-center mt-3" style="font-size:.72rem;color:#475569;line-height:1.5;">
+          ⚠ Estimates based on standard ingredient values. Actual nutrition may vary.
+        </p>
+      </div>
+
+      <!-- Similar Recipes -->
+      <?php if (!empty($similar)): ?>
+      <div class="sp-card p-3">
+        <h5 class="fw-black mb-3 p-1">Similar Recipes</h5>
+        <?php foreach ($similar as $s): ?>
+          <a href="<?= BASE_URL ?>views/user/recipe-detail.php?id=<?= $s['id'] ?>"
+             class="d-flex gap-3 mb-3 pb-3 border-bottom text-decoration-none text-dark">
+            <img src="<?= resolveImageUrl($s['image_url'] ?? '') ?>"
+                 style="width:72px;height:72px;border-radius:12px;object-fit:cover;flex-shrink:0;"
+                 onerror="this.src='<?= ASSETS_PATH ?>images/default-recipes.jpg'"
+                 alt="<?= htmlspecialchars($s['name']) ?>">
+            <div>
+              <div class="fw-bold small mb-1"><?= htmlspecialchars($s['name']) ?></div>
+              <div class="text-muted" style="font-size:.75rem;">
+                <i class="bi bi-clock me-1"></i><?= $s['prep_time'] ?>m ·
+                <i class="bi bi-fire me-1 text-success"></i><?= number_format($s['calories']) ?> kcal
+              </div>
+            </div>
+          </a>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
+    </div>
+  </div>
 </div>
 
-<!-- Flash Messages -->
-<?php if (isset($_SESSION['success'])): ?>
-    <div class="rd-container"><div class="rd-alert rd-alert-success"><?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?></div></div>
-<?php endif; ?>
-<?php if (isset($_SESSION['error'])): ?>
-    <div class="rd-container"><div class="rd-alert rd-alert-error"><?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?></div></div>
-<?php endif; ?>
-
-<!-- Hero Section -->
-<section class="rd-hero">
-    <div class="rd-container">
-        <div class="rd-hero-grid">
-            <div class="rd-hero-content">
-                <div class="rd-badges">
-                    <span class="rd-badge rd-badge-fresh">&#127807; FRESH &amp; LOCAL</span>
-                    <span class="rd-badge rd-badge-category"><?php echo htmlspecialchars(strtoupper($recipe['category'])); ?></span>
-                </div>
-                <h1 class="rd-title">
-                    Authentic <span class="text-green"><?php echo htmlspecialchars($recipe['name']); ?></span>
-                    <br><?php echo htmlspecialchars($recipe['category']); ?> Style
-                </h1>
-                <p class="rd-description">
-                    <?php echo !empty($recipe['description']) ? htmlspecialchars($recipe['description']) : 'A delicious ' . htmlspecialchars($recipe['category']) . ' recipe perfect for any occasion.'; ?>
-                </p>
-
-                <div class="rd-meta-bar">
-                    <div class="rd-meta-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        <div>
-                            <span class="rd-meta-label">PREP TIME</span>
-                            <span class="rd-meta-value"><?php echo $recipe['prep_time']; ?> mins</span>
-                        </div>
-                    </div>
-                    <div class="rd-meta-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/></svg>
-                        <div>
-                            <span class="rd-meta-label">CALORIES</span>
-                            <span class="rd-meta-value"><?php echo number_format($recipe['calories']); ?> kcal</span>
-                        </div>
-                    </div>
-                    <div class="rd-meta-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                        <div>
-                            <span class="rd-meta-label">SERVINGS</span>
-                            <span class="rd-meta-value"><?php echo $servings; ?> People</span>
-                        </div>
-                    </div>
-                    <div class="rd-meta-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" fill="#f59e0b"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                        <div>
-                            <span class="rd-meta-label">RATING</span>
-                            <span class="rd-meta-value"><?php echo number_format($recipe['average_rating'], 1); ?> (<?php echo $recipe['total_ratings']; ?>)</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="rd-author-row">
-                    <div class="rd-author">
-                        <div class="rd-author-avatar">
-                            <?php echo strtoupper(substr($_SESSION['username'], 0, 1)); ?>
-                        </div>
-                        <div>
-                            <span class="rd-author-label">Recipe by</span>
-                            <span class="rd-author-name">Chef <?php echo htmlspecialchars($_SESSION['username']); ?></span>
-                        </div>
-                    </div>
-                    <form method="POST" action="<?php echo BASE_URL; ?>controllers/UserController.php" class="rd-save-form">
-                        <input type="hidden" name="action" value="<?php echo $is_favorited ? 'remove_favorite' : 'add_favorite'; ?>">
-                        <input type="hidden" name="recipe_id" value="<?php echo $recipe_id; ?>">
-                        <input type="hidden" name="redirect" value="<?php echo BASE_URL . 'views/user/recipe-detail.php?id=' . $recipe_id; ?>">
-                        <button type="submit" class="rd-save-btn <?php echo $is_favorited ? 'saved' : ''; ?>">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="<?php echo $is_favorited ? '#22c55e' : 'none'; ?>" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-                            <?php echo $is_favorited ? 'Saved' : 'Save Recipe'; ?>
-                        </button>
-                    </form>
-                </div>
-            </div>
-            <div class="rd-hero-image">
-                <img src="<?php echo ASSETS_PATH . 'images/' . ($recipe['image_url'] ?: 'recipes/default.jpg'); ?>" 
-                     alt="<?php echo htmlspecialchars($recipe['name']); ?>"
-                     onerror="this.src='<?php echo ASSETS_PATH; ?>images/recipes/default.jpg'">
-                <div class="rd-nutrition-badge">
-                    <span class="rd-nutrition-icon">&#9889;</span>
-                    <span class="rd-nutrition-label">HIGH PROTEIN</span>
-                    <span class="rd-nutrition-text">Ideal for post-workout meal</span>
-                </div>
-            </div>
-        </div>
+<!-- ── Focus Mode Overlay ─────────────────────────────────────── -->
+<div class="focus-mode-overlay" id="focus-mode">
+  <div class="focus-mode-header">
+    <div class="d-flex align-items-center gap-3">
+        <div class="bg-primary-sp text-white rounded-3 px-3 py-1 fw-bold">Chef View</div>
+        <h4 class="mb-0 fw-black text-white"><?= htmlspecialchars($recipe['name']) ?></h4>
     </div>
-</section>
-
-<!-- Ingredients & Nutrition Section -->
-<section class="rd-ingredients-section">
-    <div class="rd-container">
-        <div class="rd-ing-grid">
-            <!-- Ingredients Card -->
-            <div class="rd-ing-card">
-                <div class="rd-ing-header">
-                    <h2>Ingredients</h2>
-                    <div class="rd-unit-toggle">
-                        <button class="rd-unit-btn active">Metric</button>
-                        <button class="rd-unit-btn">US</button>
-                    </div>
-                </div>
-
-                <?php
-                // Group ingredients by category if available, otherwise show flat
-                $grouped = [];
-                foreach ($recipe['ingredients'] as $ing) {
-                    $cat = isset($ing['category']) ? $ing['category'] : 'Ingredients';
-                    $grouped[$cat][] = $ing;
-                }
-                ?>
-
-                <?php foreach ($grouped as $cat_name => $items): ?>
-                    <h4 class="rd-ing-category"><?php echo htmlspecialchars(strtoupper('For the ' . $cat_name)); ?></h4>
-                    <ul class="rd-ing-list">
-                        <?php foreach ($items as $ing): ?>
-                            <li class="rd-ing-item">
-                                <span class="rd-ing-circle"></span>
-                                <span><?php echo number_format($ing['quantity'], 1); ?> <?php echo htmlspecialchars($ing['unit']); ?> <?php echo htmlspecialchars($ing['name']); ?></span>
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
-                <?php endforeach; ?>
-
-                <button class="rd-shopping-btn">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 1.98-1.67L23 6H6"/></svg>
-                    Add ingredients to shopping list
-                </button>
-            </div>
-
-            <!-- Nutrition Card -->
-            <div class="rd-nutrition-card">
-                <div class="rd-nutrition-header">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                    <h3>Nutrition Facts</h3>
-                </div>
-                <div class="rd-nutrition-list">
-                    <div class="rd-nutrition-row">
-                        <span>Calories</span>
-                        <span class="rd-nutrition-val"><?php echo number_format($recipe['calories']); ?> kcal</span>
-                    </div>
-                    <div class="rd-nutrition-row">
-                        <span>Carbs</span>
-                        <span class="rd-nutrition-val"><?php echo $est_carbs; ?>g</span>
-                    </div>
-                    <div class="rd-nutrition-row rd-highlight-row">
-                        <span>Protein</span>
-                        <span class="rd-nutrition-val rd-highlight"><?php echo $est_protein; ?>g</span>
-                    </div>
-                    <div class="rd-nutrition-row">
-                        <span>Fat</span>
-                        <span class="rd-nutrition-val"><?php echo $est_fat; ?>g</span>
-                    </div>
-                    <div class="rd-nutrition-row">
-                        <span>Fiber</span>
-                        <span class="rd-nutrition-val"><?php echo $est_fiber; ?>g</span>
-                    </div>
-                </div>
-                <div class="rd-protein-badge">
-                    This recipe covers ~<?php echo min(100, round($est_protein / 50 * 100)); ?>% of your daily recommended protein intake.
-                </div>
-
-                <!-- Community Photo Upload -->
-                <div class="rd-community-card">
-                    <h4 class="rd-community-title">Tried this recipe?</h4>
-                    <p class="rd-community-text">Upload a photo of your creation and inspire others in the SmartPantry community!</p>
-                    <button class="rd-upload-btn">Upload Photo</button>
-                </div>
-
-                <!-- Related Tags -->
-                <div class="rd-tags-section">
-                    <h4 class="rd-tags-title">RELATED TAGS</h4>
-                    <div class="rd-tags-list">
-                        <span class="rd-tag"><?php echo htmlspecialchars($recipe['category']); ?></span>
-                        <?php
-                        // Generate tags from category and recipe properties
-                        $tags = ['Dinner', 'Homemade'];
-                        if ($recipe['prep_time'] <= 30) $tags[] = 'Quick';
-                        if ($recipe['calories'] < 500) $tags[] = 'Light';
-                        if ($est_protein > 20) $tags[] = 'High Protein';
-                        foreach (array_slice($tags, 0, 4) as $tag):
-                        ?>
-                            <span class="rd-tag"><?php echo $tag; ?></span>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <button class="btn btn-outline-light border-0" id="btn-close-focus" style="font-size:1.5rem;"><i class="bi bi-x-lg"></i></button>
+  </div>
+  
+  <div class="focus-mode-content">
+    <div class="focus-step-card animate-fade">
+        <div class="focus-step-num" id="focus-step-label">Step 1 of 5</div>
+        <div class="focus-step-text" id="focus-step-text">First step goes here...</div>
     </div>
-</section>
-
-<!-- Instructions Section -->
-<section class="rd-instructions-section">
-    <div class="rd-container">
-        <h2 class="rd-section-title">Instructions</h2>
-        <div class="rd-steps">
-            <?php foreach ($steps as $i => $step): ?>
-                <div class="rd-step">
-                    <div class="rd-step-number"><?php echo $i + 1; ?></div>
-                    <div class="rd-step-content">
-                        <?php if (!empty($step['title'])): ?>
-                            <h3 class="rd-step-title"><?php echo htmlspecialchars($step['title']); ?></h3>
-                        <?php else: ?>
-                            <h3 class="rd-step-title">Step <?php echo $i + 1; ?></h3>
-                        <?php endif; ?>
-                        <p class="rd-step-body"><?php echo nl2br(htmlspecialchars($step['body'])); ?></p>
-                    </div>
-                </div>
-                <?php if ($i < count($steps) - 1): ?>
-                    <div class="rd-step-connector"></div>
-                <?php endif; ?>
-            <?php endforeach; ?>
-        </div>
+    
+    <div class="focus-controls">
+        <button class="btn-focus" id="focus-prev">Previous</button>
+        <button class="btn-focus btn-focus-primary" id="focus-next">Next Step</button>
     </div>
-</section>
-
-<!-- Rating Section -->
-<section class="rd-rating-section">
-    <div class="rd-container">
-        <h2 class="rd-section-title">Rate this Recipe</h2>
-        <?php if ($user_rating): ?>
-            <p class="rd-rating-info">You rated this recipe: <strong><?php echo $user_rating['rating']; ?> stars</strong></p>
-        <?php endif; ?>
-        <form method="POST" action="<?php echo BASE_URL; ?>controllers/UserController.php" class="rd-rating-form">
-            <input type="hidden" name="action" value="add_rating">
-            <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
-            <input type="hidden" name="recipe_id" value="<?php echo $recipe_id; ?>">
-            <div class="rd-rating-stars">
-                <?php for ($i = 1; $i <= 5; $i++): ?>
-                    <label class="rd-star-label">
-                        <input type="radio" name="rating" value="<?php echo $i; ?>" <?php echo ($user_rating && $user_rating['rating'] == $i) ? 'checked' : ''; ?> required>
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                    </label>
-                <?php endfor; ?>
-            </div>
-            <textarea name="comment" class="rd-comment-input" rows="3" placeholder="Share your thoughts about this recipe..."><?php echo $user_rating ? htmlspecialchars($user_rating['comment']) : ''; ?></textarea>
-            <button type="submit" class="rd-submit-btn">Submit Rating</button>
-        </form>
-
-        <!-- User Reviews -->
-        <?php if (!empty($recipe['ratings'])): ?>
-            <div class="rd-reviews">
-                <h3 class="rd-reviews-title">User Reviews</h3>
-                <?php foreach ($recipe['ratings'] as $review): ?>
-                    <div class="rd-review">
-                        <div class="rd-review-header">
-                            <div class="rd-review-avatar"><?php echo strtoupper(substr($review['username'], 0, 1)); ?></div>
-                            <div>
-                                <span class="rd-review-author"><?php echo htmlspecialchars($review['username']); ?></span>
-                                <span class="rd-review-date"><?php echo timeAgo($review['created_at']); ?></span>
-                            </div>
-                            <div class="rd-review-stars"><?php echo displayStars($review['rating']); ?></div>
-                        </div>
-                        <?php if (!empty($review['comment'])): ?>
-                            <p class="rd-review-comment"><?php echo nl2br(htmlspecialchars($review['comment'])); ?></p>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
+    
+    <div class="focus-progress-wrap" style="width:100%;">
+        <div class="focus-progress">
+            <div class="focus-progress-bar" id="focus-bar"></div>
+        </div>
+        <div class="text-center mt-3 small text-muted" id="focus-pct">20% Complete</div>
     </div>
-</section>
-
-<!-- You Might Also Like -->
-<?php if (!empty($similar_recipes)): ?>
-<section class="rd-similar-section">
-    <div class="rd-container">
-        <h2 class="rd-section-title">You might also like</h2>
-        <div class="rd-similar-grid">
-            <?php foreach ($similar_recipes as $sr): ?>
-                <a href="<?php echo BASE_URL; ?>views/user/recipe-detail.php?id=<?php echo $sr['id']; ?>" class="rd-similar-card">
-                    <div class="rd-similar-img">
-                        <img src="<?php echo ASSETS_PATH . 'images/' . ($sr['image_url'] ?: 'recipes/default.jpg'); ?>" 
-                             alt="<?php echo htmlspecialchars($sr['name']); ?>"
-                             onerror="this.src='<?php echo ASSETS_PATH; ?>images/recipes/default.jpg'">
-                        <span class="rd-similar-cal"><?php echo number_format($sr['calories']); ?> kcal</span>
-                    </div>
-                    <div class="rd-similar-info">
-                        <h4><?php echo htmlspecialchars($sr['name']); ?></h4>
-                        <p><?php echo htmlspecialchars(substr($sr['description'] ?: 'A delicious recipe.', 0, 60)); ?></p>
-                        <div class="rd-similar-footer">
-                            <?php echo displayStars($sr['average_rating']); ?>
-                            <span class="rd-similar-link">View Recipe</span>
-                        </div>
-                    </div>
-                </a>
-            <?php endforeach; ?>
-        </div>
-    </div>
-</section>
-<?php endif; ?>
-
-<!-- Footer -->
-<footer class="rd-footer">
-    <div class="rd-footer-container">
-        <div class="rd-footer-col rd-footer-brand">
-            <div class="rd-footer-logo">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                    <rect width="24" height="24" rx="4" fill="#22c55e"/>
-                    <path d="M7 12l3 3 7-7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span>SmartPantry</span>
-            </div>
-            <p>Making healthy cooking accessible, fun, and personalized for everyone, everywhere.</p>
-        </div>
-        <div class="rd-footer-col">
-            <h4>Product</h4>
-            <a href="<?php echo BASE_URL; ?>views/user/recipe-search.php">Recipes</a>
-            <a href="<?php echo BASE_URL; ?>views/user/home.php">Home</a>
-        </div>
-        <div class="rd-footer-col">
-            <h4>Company</h4>
-            <a href="<?php echo BASE_URL; ?>views/user/home.php#how-it-works">About Us</a>
-            <a href="<?php echo BASE_URL; ?>views/user/contact.php">Contact</a>
-        </div>
-        <div class="rd-footer-col">
-            <h4>Stay Updated</h4>
-            <div class="rd-footer-newsletter">
-                <input type="email" placeholder="Email address">
-                <button>&#10148;</button>
-            </div>
-        </div>
-    </div>
-    <div class="rd-footer-bottom">
-        <p>&copy; <?php echo date('Y'); ?> SmartPantry. All rights reserved.</p>
-    </div>
-</footer>
+  </div>
+</div>
 
 <script>
-// Star rating interactivity
-document.querySelectorAll('.rd-star-label').forEach((label, idx) => {
-    label.addEventListener('mouseenter', () => {
-        document.querySelectorAll('.rd-star-label svg').forEach((svg, si) => {
-            if (si <= idx) {
-                svg.setAttribute('fill', '#f59e0b');
-                svg.setAttribute('stroke', '#f59e0b');
-            } else {
-                svg.setAttribute('fill', 'none');
-                svg.setAttribute('stroke', '#d1d5db');
-            }
+document.addEventListener('DOMContentLoaded', function() {
+    // ── Initializations ──
+    const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'))
+    popoverTriggerList.map(function (popoverTriggerEl) {
+        return new bootstrap.Popover(popoverTriggerEl)
+    })
+
+    // ── Calculator Logic ──
+    const servingsVal = document.getElementById('servings-val');
+    const baseServings = parseInt(servingsVal.dataset.base);
+    const dailyGoal = <?= (int)$goal ?>;
+    
+    function updateCalculator(newServings) {
+        if (newServings < 1) newServings = 1;
+        if (newServings > 20) newServings = 20;
+        
+        servingsVal.textContent = newServings;
+        const factor = newServings / baseServings;
+        
+        document.querySelectorAll('.calc-qty').forEach(el => {
+            const base = parseFloat(el.dataset.base);
+            const val = base * factor;
+            el.textContent = val % 1 === 0 ? val : val.toFixed(1);
         });
-    });
-    label.addEventListener('click', () => {
-        label.querySelector('input').checked = true;
-        document.querySelectorAll('.rd-star-label svg').forEach((svg, si) => {
-            if (si <= idx) {
-                svg.setAttribute('fill', '#f59e0b');
-                svg.setAttribute('stroke', '#f59e0b');
-            } else {
-                svg.setAttribute('fill', 'none');
-                svg.setAttribute('stroke', '#d1d5db');
-            }
+        
+        const baseCals = parseFloat(document.getElementById('total-cals').dataset.base);
+        const newCals = baseCals * factor;
+        const formattedCals = Math.round(newCals).toLocaleString();
+        
+        document.getElementById('total-cals').textContent = formattedCals;
+        document.getElementById('side-cals').textContent = formattedCals;
+        
+        const nutrients = ['protein', 'carbs', 'fat'];
+        nutrients.forEach(n => {
+            const el = document.getElementById('calc-' + n);
+            const base = parseFloat(el.dataset.base);
+            el.textContent = Math.round(base * factor) + 'g';
         });
+        
+        const pct = Math.min(100, Math.round((newCals / dailyGoal) * 100));
+        document.getElementById('goal-pct').textContent = pct + '%';
+        const circle = document.querySelector('.nutrition-sidebar circle[stroke="#16a34a"]');
+        const r = 58;
+        const circ = 2 * Math.PI * r;
+        circle.style.strokeDashoffset = circ * (1 - pct/100);
+    }
+    
+    document.getElementById('servings-inc').addEventListener('click', () => updateCalculator(parseInt(servingsVal.textContent) + 1));
+    document.getElementById('servings-dec').addEventListener('click', () => updateCalculator(parseInt(servingsVal.textContent) - 1));
+
+    // ── Focus Mode Logic ──
+    const steps = <?= json_encode($steps) ?>;
+    let currentStep = 0;
+    const focusMode = document.getElementById('focus-mode');
+
+    function updateFocusView() {
+        const stepText = steps[currentStep];
+        const card = document.querySelector('.focus-step-card');
+        
+        // Simple re-trigger animation
+        card.classList.remove('animate-fade');
+        void card.offsetWidth; 
+        card.classList.add('animate-fade');
+
+        document.getElementById('focus-step-label').textContent = `Step ${currentStep + 1} of ${steps.length}`;
+        document.getElementById('focus-step-text').textContent = stepText;
+        
+        const pct = Math.round(((currentStep + 1) / steps.length) * 100);
+        document.getElementById('focus-bar').style.width = pct + '%';
+        document.getElementById('focus-pct').textContent = pct + '% Complete';
+
+        document.getElementById('focus-prev').disabled = (currentStep === 0);
+        document.getElementById('focus-next').textContent = (currentStep === steps.length - 1) ? 'Finish Cooking' : 'Next Step';
+    }
+
+    document.getElementById('btn-start-cooking').addEventListener('click', () => {
+        focusMode.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        currentStep = 0;
+        updateFocusView();
     });
-});
-document.querySelector('.rd-rating-stars')?.addEventListener('mouseleave', () => {
-    const checked = document.querySelector('.rd-star-label input:checked');
-    const checkedIdx = checked ? parseInt(checked.value) - 1 : -1;
-    document.querySelectorAll('.rd-star-label svg').forEach((svg, si) => {
-        if (si <= checkedIdx) {
-            svg.setAttribute('fill', '#f59e0b');
-            svg.setAttribute('stroke', '#f59e0b');
+
+    document.getElementById('btn-close-focus').addEventListener('click', () => {
+        focusMode.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    });
+
+    document.getElementById('focus-next').addEventListener('click', () => {
+        if (currentStep < steps.length - 1) {
+            currentStep++;
+            updateFocusView();
         } else {
-            svg.setAttribute('fill', 'none');
-            svg.setAttribute('stroke', '#d1d5db');
+            focusMode.style.display = 'none';
+            document.body.style.overflow = 'auto';
+            alert('Congratulations! Hope your meal turned out amazing! 🍳');
+        }
+    });
+
+    document.getElementById('focus-prev').addEventListener('click', () => {
+        if (currentStep > 0) {
+            currentStep--;
+            updateFocusView();
+        }
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+        if (focusMode.style.display === 'flex') {
+            if (e.key === 'ArrowRight' || e.key === ' ') e.preventDefault(), document.getElementById('focus-next').click();
+            if (e.key === 'ArrowLeft') document.getElementById('focus-prev').click();
+            if (e.key === 'Escape') document.getElementById('btn-close-focus').click();
         }
     });
 });
-
-// Unit toggle (visual only)
-document.querySelectorAll('.rd-unit-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.rd-unit-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-    });
-});
-
-// Auto-dismiss alerts
-document.querySelectorAll('.rd-alert').forEach(el => {
-    setTimeout(() => el.style.opacity = '0', 3000);
-    setTimeout(() => el.remove(), 3500);
-});
 </script>
-</body>
-</html>
 
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>

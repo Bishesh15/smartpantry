@@ -1,345 +1,324 @@
 <?php
-$page_title = 'Home';
+$page_title = 'Welcome';
 require_once __DIR__ . '/../../includes/session.php';
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../config/constants.php';
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartPantry - Cook Healthy, Authentic Meals with What You Have</title>
-    <link rel="stylesheet" href="<?php echo ASSETS_PATH; ?>css/landing.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-</head>
-<body>
+require_once __DIR__ . '/../../models/Recipe.php';
+require_once __DIR__ . '/../../config/database.php';
 
-<!-- Navigation -->
-<nav class="landing-nav">
-    <div class="nav-container">
-        <a href="<?php echo BASE_URL; ?>" class="nav-logo">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <rect width="24" height="24" rx="4" fill="#22c55e"/>
-                <path d="M7 12l3 3 7-7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>SmartPantry</span>
-        </a>
-        <div class="nav-links">
-            <a href="<?php echo BASE_URL; ?>views/user/recipe-search.php">Recipes</a>
-            <a href="#how-it-works">About Us</a>
-            <a href="<?php echo BASE_URL; ?>views/user/contact.php">Contact Us</a>
-        </div>
-        <div class="nav-actions">
-            <?php if (isLoggedIn()): ?>
-                <a href="<?php echo BASE_URL; ?>views/user/dashboard.php" class="nav-user-icon" title="<?php echo htmlspecialchars($_SESSION['username']); ?>">
-                    <?php echo strtoupper(substr($_SESSION['username'], 0, 1)); ?>
-                </a>
-                <a href="<?php echo BASE_URL; ?>views/user/recipe-search.php" class="btn-nav-primary">Find Recipes</a>
-                <a href="<?php echo BASE_URL; ?>controllers/AuthController.php?action=logout" class="btn-nav-outline">Logout</a>
-            <?php else: ?>
-                <a href="<?php echo BASE_URL; ?>views/user/login.php" class="btn-nav-login">Login</a>
-                <a href="<?php echo BASE_URL; ?>views/user/register.php" class="btn-nav-primary">Get Started</a>
-            <?php endif; ?>
-        </div>
-        <button class="mobile-menu-btn" id="mobileMenuBtn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
-        </button>
-    </div>
-</nav>
-
-<!-- Hero Section -->
-<section class="hero-section">
-    <div class="hero-container">
-        <div class="hero-content">
-            <span class="hero-badge">&#127807; FRESH &amp; LOCAL</span>
-            <h1>Cook Healthy,<br><span class="text-green">Authentic Meals</span> with<br>What You Have.</h1>
-            <p class="hero-subtitle">Instant recipe recommendations for Nepalese and global cuisines, tailored to your pantry and calorie goals.</p>
-            <div class="hero-buttons">
-                <a href="#search-section" class="btn-hero-primary">Start Cooking Now</a>
-                <a href="#community" class="btn-hero-outline">View Success Stories</a>
-            </div>
-            <div class="hero-trust">
-                <div class="trust-avatars">
-                    <div class="avatar" style="background: #f59e0b;">A</div>
-                    <div class="avatar" style="background: #3b82f6;">S</div>
-                    <div class="avatar" style="background: #ef4444;">D</div>
-                </div>
-                <span>Trusted by <strong>10,000+</strong> home cooks</span>
-            </div>
-        </div>
-        <div class="hero-image">
-            <div class="hero-recipe-card">
-                <img src="<?php echo ASSETS_PATH; ?>images/recipes/default.jpg" alt="Featured Recipe" class="hero-recipe-img">
-                <div class="hero-recipe-overlay">
-                    <div class="hero-recipe-info">
-                        <span class="hero-recipe-name">Chicken Momos</span>
-                        <span class="hero-recipe-sub">Authentic Nepalese Style</span>
-                    </div>
-                    <div class="hero-recipe-cal">
-                        <span class="cal-number">320 kcal</span>
-                        <div class="cal-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- Search Section -->
-<section class="search-section" id="search-section">
-    <div class="search-container">
-        <h2>What's in your kitchen today?</h2>
-        <p>Don't know what to cook? Enter 3 ingredients and let us handle the rest.</p>
-        <form action="<?php echo BASE_URL; ?>views/user/recipe-search.php" method="GET" class="landing-search-form">
-            <div class="search-input-wrapper">
-                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
-                <input type="text" name="ingredients" placeholder="Enter ingredients (e.g., Chicken, Rice, Tomatoes)" class="landing-search-input">
-                <button type="submit" class="landing-search-btn">Find Recipes</button>
-            </div>
-        </form>
-        <div class="popular-tags">
-            <span>Popular:</span>
-            <button type="button" class="tag-btn" data-ingredient="Rice">Rice +</button>
-            <button type="button" class="tag-btn" data-ingredient="Lentils">Lentils +</button>
-            <button type="button" class="tag-btn" data-ingredient="Spinach">Spinach +</button>
-            <button type="button" class="tag-btn" data-ingredient="Chicken">Chicken +</button>
-            <button type="button" class="tag-btn" data-ingredient="Garlic">Garlic +</button>
-        </div>
-    </div>
-</section>
-
-<!-- Why Choose Section -->
-<section class="why-section" id="features">
-    <div class="section-container">
-        <h2>Why choose SmartPantry?</h2>
-        <p class="section-subtitle">We combine traditional cooking with modern health tracking to help you eat better.</p>
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon" style="background: #f0fdf4;">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
-                        <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>
-                    </svg>
-                </div>
-                <h3>Smart Pantry</h3>
-                <p>Stop wasting food. Input what you already have in your fridge and get instant, delicious suggestions.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon" style="background: #f0fdf4;">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
-                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-                    </svg>
-                </div>
-                <h3>Health First</h3>
-                <p>Automatic calorie and macro tracking for every meal. Stay on top of your fitness goals effortlessly.</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon" style="background: #f0fdf4;">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-                    </svg>
-                </div>
-                <h3>Global Flavors</h3>
-                <p>From the mountains of Nepal to kitchens around the world. Explore diverse, authentic cuisines.</p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- How It Works Section -->
-<section class="how-section" id="how-it-works">
-    <div class="section-container">
-        <div class="how-grid">
-            <div class="how-images">
-                <div class="how-img-grid">
-                    <img src="<?php echo ASSETS_PATH; ?>images/recipes/default.jpg" alt="Food" class="how-img">
-                    <img src="<?php echo ASSETS_PATH; ?>images/recipes/default.jpg" alt="Food" class="how-img">
-                    <img src="<?php echo ASSETS_PATH; ?>images/recipes/default.jpg" alt="Food" class="how-img">
-                    <img src="<?php echo ASSETS_PATH; ?>images/recipes/default.jpg" alt="Food" class="how-img">
-                </div>
-            </div>
-            <div class="how-content">
-                <h2>How it works</h2>
-                <div class="how-steps">
-                    <div class="how-step">
-                        <div class="step-number">1</div>
-                        <div class="step-info">
-                            <h3>Add Your Ingredients</h3>
-                            <p>Simply type in what you have in your pantry or fridge. No more grocery runs for one missing spice.</p>
-                        </div>
-                    </div>
-                    <div class="how-step">
-                        <div class="step-number">2</div>
-                        <div class="step-info">
-                            <h3>Get Customized Recipes</h3>
-                            <p>Our engine suggests authentic recipes based on your inventory. Filter by cuisine, time, or difficulty.</p>
-                        </div>
-                    </div>
-                    <div class="how-step">
-                        <div class="step-number">3</div>
-                        <div class="step-info">
-                            <h3>Track Your Nutrition</h3>
-                            <p>See calories and macros for every serving instantly. Eat healthy without the complex math.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- Community Section -->
-<section class="community-section" id="community">
-    <div class="section-container">
-        <h2>What our community says</h2>
-        <div class="testimonials-grid">
-            <div class="testimonial-card">
-                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-                <p>"Finally found a way to make healthy Dal Bhat that fits my diet! The calorie counting feature is a game changer for my fitness journey."</p>
-                <div class="testimonial-author">
-                    <div class="author-avatar" style="background: #f59e0b;">A</div>
-                    <div>
-                        <strong>Aarav S.</strong>
-                        <span>Kathmandu, Nepal</span>
-                    </div>
-                </div>
-            </div>
-            <div class="testimonial-card">
-                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-                <p>"I had so many random ingredients in my pantry. SmartPantry helped me create a delicious dinner without going to the store. Highly recommend!"</p>
-                <div class="testimonial-author">
-                    <div class="author-avatar" style="background: #ec4899;">S</div>
-                    <div>
-                        <strong>Sarah M.</strong>
-                        <span>London, UK</span>
-                    </div>
-                </div>
-            </div>
-            <div class="testimonial-card">
-                <div class="testimonial-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
-                <p>"The user interface is so clean and easy to use. I love that I can filter for high-protein meals specifically."</p>
-                <div class="testimonial-author">
-                    <div class="author-avatar" style="background: #3b82f6;">D</div>
-                    <div>
-                        <strong>David K.</strong>
-                        <span>Sydney, Australia</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- CTA Section -->
-<section class="cta-section">
-    <div class="section-container">
-        <div class="cta-card">
-            <h2>Ready to cook something amazing?</h2>
-            <p>Join thousands of foodies cooking healthy, authentic meals today. It's free to get started.</p>
-            <?php if (isLoggedIn()): ?>
-                <a href="<?php echo BASE_URL; ?>views/user/recipe-search.php" class="btn-cta">Find Recipes Now</a>
-            <?php else: ?>
-                <a href="<?php echo BASE_URL; ?>views/user/register.php" class="btn-cta">Get Started for Free</a>
-            <?php endif; ?>
-        </div>
-    </div>
-</section>
-
-<!-- Footer -->
-<footer class="landing-footer">
-    <div class="footer-container">
-        <div class="footer-grid">
-            <div class="footer-brand">
-                <div class="footer-logo">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                        <rect width="24" height="24" rx="4" fill="#22c55e"/>
-                        <path d="M7 12l3 3 7-7" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span>SmartPantry</span>
-                </div>
-                <p>Making healthy cooking accessible, fun, and personalized for everyone, everywhere.</p>
-            </div>
-            <div class="footer-links">
-                <h4>Product</h4>
-                <a href="<?php echo BASE_URL; ?>views/user/recipe-search.php">Recipes</a>
-                <a href="#features">Nutrition Tracker</a>
-                <a href="#how-it-works">How It Works</a>
-            </div>
-            <div class="footer-links">
-                <h4>Company</h4>
-                <a href="#how-it-works">About Us</a>
-                <a href="<?php echo BASE_URL; ?>views/user/contact.php">Contact</a>
-            </div>
-            <div class="footer-newsletter">
-                <h4>Stay Updated</h4>
-                <form class="newsletter-form" onsubmit="event.preventDefault(); alert('Thanks for subscribing!');">
-                    <input type="email" placeholder="Email address" required>
-                    <button type="submit">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
-                            <path d="M5 12h14M12 5l7 7-7 7"/>
-                        </svg>
-                    </button>
-                </form>
-            </div>
-        </div>
-        <div class="footer-bottom">
-            <p>&copy; <?php echo date('Y'); ?> SmartPantry. All rights reserved.</p>
-            <div class="footer-social">
-                <a href="#" aria-label="Twitter">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg>
-                </a>
-                <a href="#" aria-label="Instagram">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
-                </a>
-            </div>
-        </div>
-    </div>
-</footer>
-
-<script>
-// Popular tag buttons - add to search input
-document.querySelectorAll('.tag-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        const input = document.querySelector('.landing-search-input');
-        const current = input.value.trim();
-        const ingredient = this.dataset.ingredient;
-        
-        if (current) {
-            if (!current.toLowerCase().includes(ingredient.toLowerCase())) {
-                input.value = current + ', ' + ingredient;
-            }
-        } else {
-            input.value = ingredient;
-        }
-        input.focus();
-    });
-});
-
-// Smooth scroll for anchor links
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function(e) {
-        e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    });
-});
-
-// Mobile menu toggle
-const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-if (mobileMenuBtn) {
-    mobileMenuBtn.addEventListener('click', function() {
-        document.querySelector('.nav-links').classList.toggle('show');
-        document.querySelector('.nav-actions').classList.toggle('show');
-    });
+$db          = getDB();
+$recipeModel = new Recipe();
+$featured    = $recipeModel->getMostViewed(6);
+if (count($featured) < 3) {
+    $featured = $recipeModel->getAll(6);
 }
-</script>
 
-</body>
-</html>
+require_once __DIR__ . '/../includes/header.php';
+?>
 
+<!-- ── Hero ─────────────────────────────────────────────── -->
+<section class="sp-hero">
+  <div class="container-xl">
+    <div class="row align-items-center g-5">
+      <div class="col-lg-6">
+        <div class="animate-fade-up">
+          <span class="badge bg-success mb-3 px-3 py-2" style="font-size:.8rem;letter-spacing:1px;box-shadow: 0 4px 10px rgba(22,163,74,0.3);">
+            🍳 SMART MATCHING
+          </span>
+          <h1 class="fw-black mb-4" style="font-size: 4rem; line-height: 1.1;">
+            Cook Smarter.<br>
+            <span class="text-success text-gradient">Waste Nothing.</span>
+          </h1>
+          <p class="lead mb-4 text-light" style="opacity: 0.9; max-width: 500px;">
+            Turn your leftover ingredients into chef-quality meals. We rank thousands of recipes based on what's in your kitchen 
+            <strong>right now</strong>.
+          </p>
+          <div class="d-flex flex-wrap gap-3">
+            <a href="<?= BASE_URL ?>views/user/recipe-search.php" class="btn-sp-primary" style="padding:1.1rem 2.5rem;font-size:1.1rem;box-shadow: 0 8px 20px rgba(22,163,74,0.4);">
+              <i class="bi bi-search"></i> Find Recipes Now
+            </a>
+            <?php if (!isLoggedIn()): ?>
+              <a href="<?= BASE_URL ?>views/user/register.php" class="btn btn-outline-light rounded-pill px-4 py-3 border-2 fw-bold" style="font-size:1rem;">
+                <i class="bi bi-person-plus"></i> Create Account
+              </a>
+            <?php else: ?>
+              <a href="<?= BASE_URL ?>views/user/pantry.php" class="btn btn-outline-light rounded-pill px-4 py-3 border-2 fw-bold" style="font-size:1rem;">
+                <i class="bi bi-basket"></i> My Pantry
+              </a>
+            <?php endif; ?>
+          </div>
+          <div class="mt-5 d-flex gap-5" style="font-size:.9rem;color:rgba(255,255,255,.7);">
+            <div><strong class="text-white fs-4 d-block">40+</strong> Ingredients</div>
+            <div><strong class="text-white fs-4 d-block">15+</strong> Recipes</div>
+            <div><strong class="text-white fs-4 d-block">24/7</strong> Support</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="animate-float">
+          <div class="bg-white rounded-5 p-5 shadow-2xl text-dark" style="border: 1px solid rgba(0,0,0,0.05);">
+            <div class="text-center mb-4">
+              <div class="bg-success-subtle d-inline-block px-3 py-1 rounded-pill text-success fw-bold small mb-2">QUICK MATCH</div>
+              <h4 class="fw-black mb-1">What's in your fridge?</h4>
+              <p class="text-muted small">Enter an ingredient to see instant results</p>
+            </div>
+            
+            <form method="POST" action="<?= BASE_URL ?>controllers/RecipeController.php" id="hero-search-form">
+              <input type="hidden" name="action" value="search">
+              <div class="search-input-group mb-4">
+                <i class="bi bi-search search-icon"></i>
+                <input type="text" name="search_term" class="form-control form-control-lg border-0 bg-light py-3 ps-5"
+                       placeholder="Garlic, Tomato, Chicken..."
+                       style="border-radius:15px;">
+              </div>
+              <button type="submit" class="btn btn-success w-100 py-3 fw-bold rounded-4 fs-5 mb-3 transition-all hover-scale">
+                Find Matching Recipes
+              </button>
+            </form>
+            
+            <div class="text-center">
+              <div class="text-muted small fw-bold mb-2">TRY THESE:</div>
+              <div class="d-flex flex-wrap justify-content-center gap-2">
+                <?php foreach (['Garlic','Rice','Tomato','Egg','Chicken'] as $ing): ?>
+                  <a href="javascript:void(0)" 
+                     onclick="const f=document.getElementById('hero-search-form'); f.search_term.value='<?= $ing ?>'; f.submit();"
+                     class="badge rounded-pill border bg-white text-dark py-2 px-3 fw-medium hover-bg-success" 
+                     style="cursor:pointer; font-size:.8rem; transition: all 0.2s;"><?= $ing ?></a>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Stats Section ────────────────────────────────────── -->
+<section class="py-5 bg-light" style="margin-top: -50px;">
+  <div class="container-xl">
+    <div class="bg-white rounded-5 shadow-sm p-4 border border-info-subtle">
+      <div class="row text-center gy-4 align-items-center">
+        <div class="col-6 col-md-3">
+          <h2 class="fw-black text-success mb-0 counter"><?= $recipeModel->getTotalCount() ?>+</h2>
+          <p class="text-muted small mb-0 fw-bold">RECIPES AVAILABLE</p>
+        </div>
+        <div class="col-6 col-md-3 border-start-md">
+          <h2 class="fw-black text-primary mb-0 counter"><?= $db->query("SELECT COUNT(*) FROM ingredients")->fetchColumn() ?>+</h2>
+          <p class="text-muted small mb-0 fw-bold">INGREDIENTS READY</p>
+        </div>
+        <div class="col-6 col-md-3 border-start-md">
+          <h2 class="fw-black text-warning mb-0 counter"><?= $db->query("SELECT COUNT(*) FROM users")->fetchColumn() ?></h2>
+          <p class="text-muted small mb-0 fw-bold">TOTAL COOKS</p>
+        </div>
+        <div class="col-6 col-md-3 border-start-md">
+          <h2 class="fw-black text-danger mb-0 counter"><?= $db->query("SELECT COUNT(*) FROM ratings")->fetchColumn() ?></h2>
+          <p class="text-muted small mb-0 fw-bold">SATISFIED RATINGS</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── How It Works ────────────────────────────────────── -->
+<section class="py-5 bg-white overflow-hidden">
+  <div class="container-xl">
+    <div class="row justify-content-center text-center mb-5">
+      <div class="col-lg-7 animate-fade-up">
+        <h2 class="fw-black mb-3 fs-1">Simple Steps to Your Next Meal</h2>
+        <p class="text-muted fs-5">We make it incredibly easy to find meals you actually want to cook.</p>
+      </div>
+    </div>
+    <div class="row g-4 justify-content-center">
+      <?php 
+      $steps = [
+        ['1', 'List Ingredients', 'Select the items you have — from spices to proteins and vegetables.', 'bi-basket-fill', '#dcfce7', '#16a34a'],
+        ['2', 'Smart Matching', 'We instantly find recipes that use the most of your ingredients.', 'bi-stars', '#dbeafe', '#2563eb'],
+        ['3', 'Cook & Enjoy', 'Follow simple steps and enjoy a delicious meal without waste.', 'bi-egg-fried', '#fef3c7', '#d97706']
+      ];
+      foreach ($steps as $s): ?>
+      <div class="col-md-4">
+        <div class="sp-card border-0 p-5 text-center h-100 bg-light rounded-5 position-relative">
+          <div class="step-number" style="position: absolute; top: 1.5rem; right: 2rem; font-size: 3rem; font-weight: 900; color: rgba(0,0,0,0.03);"><?= $s[0] ?></div>
+          <div class="mx-auto mb-4 d-flex align-items-center justify-content-center rounded-circle"
+               style="width:80px;height:80px;background:<?= $s[4] ?>;color:<?= $s[5] ?>;font-size:2.2rem;box-shadow: 0 10px 20px rgba(0,0,0,0.05);">
+            <i class="bi <?= $s[3] ?>"></i>
+          </div>
+          <h4 class="fw-bold mb-3"><?= $s[1] ?></h4>
+          <p class="text-muted"><?= $s[2] ?></p>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</section>
+
+<!-- ── Cuisine Explorer ─────────────────────────────────── -->
+<section class="py-5 bg-light">
+  <div class="container-xl">
+    <div class="d-flex justify-content-between align-items-end mb-5">
+      <div>
+        <h2 class="fw-black mb-2 fs-1">Explore Cuisines</h2>
+        <p class="text-muted mb-0">Discover flavors from around the world.</p>
+      </div>
+      <a href="<?= BASE_URL ?>views/user/recipe-search.php" class="btn btn-outline-dark fw-bold rounded-pill px-4">See All</a>
+    </div>
+    <div class="row g-4">
+      <div class="col-6 col-md-3">
+        <a href="<?= BASE_URL ?>views/user/recipe-search.php?category=Nepali" class="cuisine-card">
+          <img src="<?= ASSETS_PATH ?>images/cuisine-nepali.jpg" alt="Nepali" onerror="this.src='<?= ASSETS_PATH ?>images/default-recipes.jpg'">
+          <div class="overlay"><h5>NEPALI</h5></div>
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="<?= BASE_URL ?>views/user/recipe-search.php?category=Italian" class="cuisine-card">
+          <img src="<?= ASSETS_PATH ?>images/cuisine-italian.jpg" alt="Italian" onerror="this.src='<?= ASSETS_PATH ?>images/default-recipes.jpg'">
+          <div class="overlay"><h5>ITALIAN</h5></div>
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="<?= BASE_URL ?>views/user/recipe-search.php?category=Indian" class="cuisine-card">
+          <img src="https://images.unsplash.com/photo-1585937421612-70a008356fbe?q=80&w=800&auto=format&fit=crop" alt="Indian">
+          <div class="overlay"><h5>INDIAN</h5></div>
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="<?= BASE_URL ?>views/user/recipe-search.php?category=Chinese" class="cuisine-card">
+          <img src="https://images.unsplash.com/photo-1552611052-33e04de081de?q=80&w=800&auto=format&fit=crop" alt="Chinese">
+          <div class="overlay"><h5>CHINESE</h5></div>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Featured Recipes ──────────────────────────────────── -->
+<section class="py-5 bg-white">
+  <div class="container-xl">
+    <div class="row mb-5 align-items-center">
+      <div class="col">
+        <h2 class="fw-black mb-1 fs-1">Trending Recipes</h2>
+        <p class="text-muted mb-0">The most matched and cooked recipes this week.</p>
+      </div>
+      <div class="col-auto">
+        <a href="<?= BASE_URL ?>views/user/recipe-search.php" class="btn-sp-outline px-4 py-2">
+          View All <i class="bi bi-arrow-right ms-2"></i>
+        </a>
+      </div>
+    </div>
+    <div class="row g-4">
+      <?php foreach ($featured as $r): ?>
+      <div class="col-sm-6 col-lg-4">
+        <div class="sp-card recipe-card border-light h-100">
+          <div class="position-relative">
+            <a href="<?= BASE_URL ?>views/user/recipe-detail.php?id=<?= $r['id'] ?>">
+              <img src="<?= resolveImageUrl($r['image_url'] ?? '') ?>"
+                   class="card-img-top w-100" style="height:240px;object-fit:cover; border-radius: 20px 20px 0 0;"
+                   alt="<?= htmlspecialchars($r['name']) ?>"
+                   onerror="this.src='<?= ASSETS_PATH ?>images/default-recipes.jpg'">
+            </a>
+            <div class="recipe-badge-top">
+              <span class="badge <?= dietBadgeClass($r['diet_type']) ?> py-2 px-3">
+                <?= dietBadgeIcon($r['diet_type']) ?> <?= htmlspecialchars($r['diet_type']) ?>
+              </span>
+            </div>
+          </div>
+          <div class="card-body p-4">
+            <h4 class="card-title fw-black mb-3">
+              <a href="<?= BASE_URL ?>views/user/recipe-detail.php?id=<?= $r['id'] ?>"
+                 class="text-dark text-decoration-none hover-text-success">
+                <?= htmlspecialchars($r['name']) ?>
+              </a>
+            </h4>
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="card-meta">
+                <span class="text-muted small"><i class="bi bi-clock me-1 text-success"></i><?= $r['prep_time'] ?>m</span>
+                <span class="text-muted small ms-3"><i class="bi bi-fire me-1 text-danger"></i><?= number_format($r['calories']) ?> kcal</span>
+              </div>
+              <div class="rating fw-bold text-dark">
+                <i class="bi bi-star-fill text-warning"></i> <?= number_format($r['average_rating'],1) ?>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA Section ──────────────────────────────────────── -->
+<section class="py-5">
+  <div class="container-xl">
+    <div class="rounded-5 p-5 text-center text-white animate-fade-up" 
+         style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); position: relative; overflow: hidden;">
+      <div style="position: absolute; top: -50px; left: -50px; width: 200px; height: 200px; background: rgba(255,255,255,0.1); border-radius: 50%;"></div>
+      <div style="position: absolute; bottom: -50px; right: -50px; width: 300px; height: 300px; background: rgba(0,0,0,0.05); border-radius: 50%;"></div>
+      
+      <h2 class="fw-black mb-4 fs-1">Ready to cook sustainably?</h2>
+      <p class="fs-5 mb-5 mx-auto" style="max-width: 600px; opacity: 0.9;">Join thousands of home cooks who are saving ingredients and discovering amazing meals every day.</p>
+      
+      <div class="d-flex flex-wrap justify-content-center gap-3">
+        <?php if (!isLoggedIn()): ?>
+          <a href="<?= BASE_URL ?>views/user/register.php" class="btn btn-light rounded-pill px-5 py-3 fw-black text-success fs-5 shadow-lg">
+            Join Now – It's Free
+          </a>
+        <?php else: ?>
+          <a href="<?= BASE_URL ?>views/user/recipe-search.php" class="btn btn-light rounded-pill px-5 py-3 fw-black text-success fs-5 shadow-lg">
+            Find Your Next Meal
+          </a>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Add some helper styles just for the search behavior -->
+<style>
+.search-input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.search-icon {
+    position: absolute;
+    left: 1.25rem;
+    color: #94a3b8;
+    font-size: 1.2rem;
+}
+.hover-scale:hover {
+    transform: scale(1.02);
+}
+.hover-bg-success:hover {
+    background-color: var(--bs-success) !important;
+    color: white !important;
+    border-color: var(--bs-success) !important;
+}
+.text-gradient {
+    background: linear-gradient(135deg, #16a34a 0%, #4ade80 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.shadow-2xl {
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+.border-start-md {
+    border-left: 1px solid rgba(0,0,0,0.05);
+}
+@media (max-width: 768px) {
+    .border-start-md {
+        border-left: none;
+    }
+}
+.recipe-badge-top {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    z-index: 2;
+}
+.hover-text-success:hover {
+    color: var(--bs-success) !important;
+}
+</style>
+
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>

@@ -1,553 +1,317 @@
 <?php
 /**
- * Admin Controller
- * Handles admin authentication and CRUD operations for recipes and ingredients
+ * AdminController — Admin auth + full CRUD for recipes, ingredients, users, feedback
+ * Smart Pantry
+ *
+ * Admin login is COMPLETELY SEPARATE from user login.
+ * No Google OAuth. No email whitelist. Simple bcrypt.
  */
 
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../models/Recipe.php';
 require_once __DIR__ . '/../models/Ingredient.php';
-require_once __DIR__ . '/../models/Feedback.php';
 require_once __DIR__ . '/../models/User.php';
-require_once __DIR__ . '/../models/Rating.php';
+require_once __DIR__ . '/../models/Feedback.php';
 
 class AdminController {
-    private $conn;
-    private $recipe;
-    private $ingredient;
-    private $feedback;
-    private $user;
-    private $rating;
+    private ?PDO       $db;
+    private Recipe     $recipe;
+    private Ingredient $ingredient;
+    private User       $user;
+    private Feedback   $feedback;
 
     public function __construct() {
-        $this->conn = getDB();
-        $this->recipe = new Recipe();
+        $this->db         = getDB();
+        $this->recipe     = new Recipe();
         $this->ingredient = new Ingredient();
-        $this->feedback = new Feedback();
-        $this->user = new User();
-        $this->rating = new Rating();
+        $this->user       = new User();
+        $this->feedback   = new Feedback();
     }
 
-    /**
-     * Admin registration
-     */
-    public function register() {
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/admin/register.php');
-        }
+    /* ── Auth ───────────────────────────────────────────────── */
 
-        // Verify CSRF token
-        if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
-            $_SESSION['error'] = 'Invalid security token. Please try again.';
-            redirect(BASE_URL . 'views/admin/register.php');
-        }
-
-        $username = isset($_POST['username']) ? trim($_POST['username']) : '';
-        $password_hash = isset($_POST['password_hash']) ? $_POST['password_hash'] : '';
-
-        if (empty($username) || empty($password_hash)) {
-            $_SESSION['error'] = 'All required fields must be filled';
-            redirect(BASE_URL . 'views/admin/register.php');
-        }
-
-        // Validate username format
-        if (!validateUsername($username)) {
-            $_SESSION['error'] = 'Username must be 3-20 characters (letters, numbers, underscore only)';
-            redirect(BASE_URL . 'views/admin/register.php');
-        }
-
-        // Validate password hash (should be 64 chars for SHA-256)
-        if (strlen($password_hash) !== 64 || !ctype_xdigit($password_hash)) {
-            $_SESSION['error'] = 'Invalid password format. Please try again.';
-            redirect(BASE_URL . 'views/admin/register.php');
-        }
-
-        // Sanitize after validation
-        $username = sanitize($username);
-
-        // Check if admin already exists
-        try {
-            $checkQuery = "SELECT id FROM admins WHERE username = :username LIMIT 1";
-            $checkStmt = $this->conn->prepare($checkQuery);
-            $checkStmt->bindParam(':username', $username);
-            $checkStmt->execute();
-
-            if ($checkStmt->rowCount() > 0) {
-                $_SESSION['error'] = 'Admin account with this username already exists. Please login instead.';
-                redirect(BASE_URL . 'views/admin/register.php');
-            }
-        } catch (PDOException $e) {
-            error_log("Admin Check Error: " . $e->getMessage());
-            $_SESSION['error'] = 'Database error occurred';
-            redirect(BASE_URL . 'views/admin/register.php');
-        }
-
-        // Hash password again on server-side (double hashing)
-        $server_hash = password_hash($password_hash, PASSWORD_BCRYPT);
-
-        try {
-            $query = "INSERT INTO admins (username, password_hash) VALUES (:username, :password_hash)";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $username);
-            $stmt->bindParam(':password_hash', $server_hash);
-
-            if ($stmt->execute()) {
-                $_SESSION['success'] = 'Admin registration successful! You can now login.';
-                redirect(BASE_URL . 'views/admin/login.php');
-            } else {
-                $_SESSION['error'] = 'Registration failed';
-                redirect(BASE_URL . 'views/admin/register.php');
-            }
-        } catch (PDOException $e) {
-            error_log("Admin Registration Error: " . $e->getMessage());
-            $_SESSION['error'] = 'Database error occurred';
-            redirect(BASE_URL . 'views/admin/register.php');
-        }
-    }
-
-    /**
-     * Admin login
-     */
-    public function login() {
+    public function login(): void {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             redirect(BASE_URL . 'views/admin/login.php');
         }
 
-        // Verify CSRF token
-        if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
-            $_SESSION['error'] = 'Invalid security token. Please try again.';
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+
+        if (empty($username) || empty($password)) {
+            flashError('Username and password are required.');
             redirect(BASE_URL . 'views/admin/login.php');
         }
 
-        $username = isset($_POST['username']) ? trim($_POST['username']) : '';
-        $password_hash = isset($_POST['password_hash']) ? $_POST['password_hash'] : '';
-
-        if (empty($username) || empty($password_hash)) {
-            $_SESSION['error'] = 'Username and password are required';
+        // Guard: DB connection check
+        if (!$this->db) {
+            flashError('Database connection failed. Check config/database.php.');
             redirect(BASE_URL . 'views/admin/login.php');
         }
 
-        // Validate password hash format
-        if (strlen($password_hash) !== 64 || !ctype_xdigit($password_hash)) {
-            $_SESSION['error'] = 'Invalid password format. Please try again.';
+        $st = $this->db->prepare("SELECT * FROM admins WHERE username = ? LIMIT 1");
+        $st->execute([$username]);
+        $admin = $st->fetch();
+
+        if (!$admin) {
+            flashError('No admin account found with that username.');
             redirect(BASE_URL . 'views/admin/login.php');
         }
 
-        // Sanitize username
-        $username = sanitize($username);
-
-        try {
-            $query = "SELECT id, username, password_hash FROM admins WHERE username = :username LIMIT 1";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $username);
-            $stmt->execute();
-
-            if ($stmt->rowCount() > 0) {
-                $admin = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                // Verify password (password_hash is SHA-256 from client, stored as Bcrypt on server)
-                if (password_verify($password_hash, $admin['password_hash'])) {
-                    // Allow both admin and user to be logged in simultaneously - don't clear user session
-                    $_SESSION['admin_id'] = $admin['id'];
-                    $_SESSION['admin_username'] = $admin['username'];
-                    session_regenerate_id(true);
-                    $_SESSION['success'] = 'Login successful';
-                    redirect(BASE_URL . 'views/admin/dashboard.php');
-                }
-            }
-
-            $_SESSION['error'] = 'Invalid username or password';
-            redirect(BASE_URL . 'views/admin/login.php');
-        } catch (PDOException $e) {
-            error_log("Admin Login Error: " . $e->getMessage());
-            $_SESSION['error'] = 'Database error occurred';
+        if (!password_verify($password, $admin['password'])) {
+            flashError('Incorrect password. Please try again.');
             redirect(BASE_URL . 'views/admin/login.php');
         }
+
+        // All good — start session
+        $_SESSION['admin_id']       = $admin['id'];
+        $_SESSION['admin_username'] = $admin['username'];
+        session_regenerate_id(true);
+        redirect(BASE_URL . 'views/admin/dashboard.php');
     }
 
-    /**
-     * Admin logout
-     */
-    public function logout() {
-        // Only clear admin session, keep user session if exists
-        unset($_SESSION['admin_id']);
-        unset($_SESSION['admin_username']);
-        $_SESSION['success'] = 'Logged out successfully';
+    public function logout(): void {
+        unset($_SESSION['admin_id'], $_SESSION['admin_username']);
+        flashSuccess('Admin logged out.');
         redirect(BASE_URL . 'views/admin/login.php');
     }
 
-    /**
-     * Create recipe
-     */
-    public function createRecipe() {
-        if (!isAdmin()) {
-            $_SESSION['error'] = 'Admin access required';
-            redirect(BASE_URL . 'views/admin/login.php');
+    /* ── Recipes ────────────────────────────────────────────── */
+
+    public function createRecipe(): void {
+        requireAdmin();
+        if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+            flashError('Security token mismatch.'); redirect(BASE_URL . 'views/admin/recipes.php');
         }
 
-        // Validate required fields
-        $name = trim($_POST['name'] ?? '');
-        $instructions = trim($_POST['instructions'] ?? '');
-        $prep_time = validateInteger($_POST['prep_time'] ?? 0, 1, 1000);
-        $category = sanitize($_POST['category'] ?? '');
+        $imageUrl = $this->handleImageUpload('recipe');
+        if (!$imageUrl) $imageUrl = sanitize($_POST['image_url'] ?? '');   // fallback to URL field
 
-        if (empty($name) || empty($instructions) || $prep_time === false || empty($category)) {
-            $_SESSION['error'] = 'Please fill all required fields correctly';
-            redirect(BASE_URL . 'views/admin/recipes.php?action=add');
-        }
+        $ingredients = $this->parseIngredientRows();
 
-        // Validate category
-        if (!in_array($category, RECIPE_CATEGORIES)) {
-            $_SESSION['error'] = 'Invalid recipe category';
-            redirect(BASE_URL . 'views/admin/recipes.php?action=add');
-        }
-
-        $data = [
-            'name' => sanitize($name),
-            'description' => sanitize($_POST['description'] ?? ''),
-            'instructions' => sanitize($instructions),
-            'prep_time' => $prep_time,
-            'image_url' => sanitize($_POST['image_url'] ?? ''),
-            'category' => $category,
-            'ingredients' => []
-        ];
-
-        // Handle image upload
-        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-            $image_path = uploadImage($_FILES['image'], 'recipes');
-            if ($image_path) {
-                $data['image_url'] = $image_path;
-            }
-        }
-
-        // Process ingredients
-        if (isset($_POST['ingredient_ids']) && is_array($_POST['ingredient_ids'])) {
-            foreach ($_POST['ingredient_ids'] as $index => $ingredient_id) {
-                if (isset($_POST['quantities'][$index])) {
-                    $data['ingredients'][] = [
-                        'ingredient_id' => intval($ingredient_id),
-                        'quantity' => floatval($_POST['quantities'][$index])
-                    ];
-                }
-            }
-        }
-
-        $result = $this->recipe->create($data);
-        
-        if ($result['success']) {
-            $_SESSION['success'] = $result['message'];
-        } else {
-            $_SESSION['error'] = $result['message'];
-        }
-
+        $result = $this->recipe->create([
+            'name'         => $_POST['name']         ?? '',
+            'description'  => $_POST['description']  ?? '',
+            'instructions' => $_POST['instructions'] ?? '',
+            'prep_time'    => $_POST['prep_time']    ?? 30,
+            'servings'     => $_POST['servings']     ?? 2,
+            'diet_type'    => $_POST['diet_type']    ?? 'Vegetarian',
+            'category'     => $_POST['category']     ?? 'Other',
+            'image_url'    => $imageUrl,
+            'ingredients'  => $ingredients,
+        ]);
+        $result['success'] ? flashSuccess($result['message']) : flashError($result['message']);
         redirect(BASE_URL . 'views/admin/recipes.php');
     }
 
-    /**
-     * Update recipe
-     */
-    public function updateRecipe($recipe_id) {
-        if (!isAdmin()) {
-            $_SESSION['error'] = 'Admin access required';
-            redirect(BASE_URL . 'views/admin/login.php');
+    public function updateRecipe(int $id): void {
+        requireAdmin();
+        if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+            flashError('Security token mismatch.'); redirect(BASE_URL . 'views/admin/recipes.php');
         }
 
-        $data = [
-            'name' => sanitize($_POST['name'] ?? ''),
-            'description' => sanitize($_POST['description'] ?? ''),
-            'instructions' => sanitize($_POST['instructions'] ?? ''),
-            'prep_time' => intval($_POST['prep_time'] ?? 0),
-            'image_url' => sanitize($_POST['image_url'] ?? ''),
-            'category' => sanitize($_POST['category'] ?? ''),
-            'ingredients' => []
-        ];
-
-        // Handle image upload
-        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-            $old_recipe = $this->recipe->getById($recipe_id);
-            if ($old_recipe && $old_recipe['image_url']) {
-                deleteImage($old_recipe['image_url']);
-            }
-            
-            $image_path = uploadImage($_FILES['image'], 'recipes');
-            if ($image_path) {
-                $data['image_url'] = $image_path;
-            }
+        $existing = $this->recipe->getById($id);
+        $imageUrl = $this->handleImageUpload('recipe');
+        if (!$imageUrl) {
+            // Check if URL field provided
+            $urlField = sanitize($_POST['image_url'] ?? '');
+            $imageUrl = $urlField ?: ($existing['image_url'] ?? '');
+        } elseif ($existing && $existing['image_url'] && !str_starts_with($existing['image_url'], 'http')) {
+            deleteImage($existing['image_url']);
         }
 
-        // Process ingredients
-        if (isset($_POST['ingredient_ids']) && is_array($_POST['ingredient_ids'])) {
-            foreach ($_POST['ingredient_ids'] as $index => $ingredient_id) {
-                if (isset($_POST['quantities'][$index])) {
-                    $data['ingredients'][] = [
-                        'ingredient_id' => intval($ingredient_id),
-                        'quantity' => floatval($_POST['quantities'][$index])
-                    ];
-                }
-            }
-        }
-
-        if ($this->recipe->update($recipe_id, $data)) {
-            $_SESSION['success'] = 'Recipe updated successfully';
-        } else {
-            $_SESSION['error'] = 'Failed to update recipe';
-        }
-
+        $result = $this->recipe->update($id, [
+            'name'         => $_POST['name']         ?? '',
+            'description'  => $_POST['description']  ?? '',
+            'instructions' => $_POST['instructions'] ?? '',
+            'prep_time'    => $_POST['prep_time']    ?? 30,
+            'servings'     => $_POST['servings']     ?? 2,
+            'diet_type'    => $_POST['diet_type']    ?? 'Vegetarian',
+            'category'     => $_POST['category']     ?? 'Other',
+            'image_url'    => $imageUrl,
+            'ingredients'  => $this->parseIngredientRows(),
+        ]);
+        $result['success'] ? flashSuccess($result['message']) : flashError($result['message']);
         redirect(BASE_URL . 'views/admin/recipes.php');
     }
 
-    /**
-     * Delete recipe
-     */
-    public function deleteRecipe($recipe_id) {
-        if (!isAdmin()) {
-            $_SESSION['error'] = 'Admin access required';
-            redirect(BASE_URL . 'views/admin/login.php');
+    public function deleteRecipe(int $id): void {
+        requireAdmin();
+        $r = $this->recipe->getById($id);
+        if ($r && $r['image_url'] && !str_starts_with($r['image_url'], 'http')) {
+            deleteImage($r['image_url']);
         }
-
-        $recipe = $this->recipe->getById($recipe_id);
-        if ($recipe && $recipe['image_url']) {
-            deleteImage($recipe['image_url']);
-        }
-
-        if ($this->recipe->delete($recipe_id)) {
-            $_SESSION['success'] = 'Recipe deleted successfully';
-        } else {
-            $_SESSION['error'] = 'Failed to delete recipe';
-        }
-
+        $this->recipe->delete($id)
+            ? flashSuccess('Recipe deleted.')
+            : flashError('Could not delete recipe.');
         redirect(BASE_URL . 'views/admin/recipes.php');
     }
 
-    /**
-     * Create ingredient
-     */
-    public function createIngredient() {
-        if (!isAdmin()) {
-            $_SESSION['error'] = 'Admin access required';
-            redirect(BASE_URL . 'views/admin/login.php');
+    /* ── Ingredients ────────────────────────────────────────── */
+
+    public function createIngredient(): void {
+        requireAdmin();
+        if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+            flashError('Security token mismatch.'); redirect(BASE_URL . 'views/admin/ingredients.php');
         }
 
-        // Validate required fields
-        $name = trim($_POST['name'] ?? '');
-        $category = sanitize($_POST['category'] ?? '');
-        $calories = validateFloat($_POST['calories_per_unit'] ?? 0, 0, 10000);
-        $unit = sanitize($_POST['unit'] ?? 'gram');
+        $imageUrl = $this->handleImageUpload('ingredient');
+        if (!$imageUrl) $imageUrl = sanitize($_POST['image_url'] ?? '');
 
-        if (empty($name) || empty($category) || $calories === false || empty($unit)) {
-            $_SESSION['error'] = 'Please fill all required fields correctly';
-            redirect(BASE_URL . 'views/admin/ingredients.php?action=add');
-        }
-
-        // Validate category
-        if (!in_array($category, INGREDIENT_CATEGORIES)) {
-            $_SESSION['error'] = 'Invalid ingredient category';
-            redirect(BASE_URL . 'views/admin/ingredients.php?action=add');
-        }
-
-        $data = [
-            'name' => sanitize($name),
-            'category' => $category,
-            'calories_per_unit' => $calories,
-            'unit' => $unit,
-            'image_url' => sanitize($_POST['image_url'] ?? '')
-        ];
-
-        // Handle image upload
-        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-            $image_path = uploadImage($_FILES['image'], 'ingredients');
-            if ($image_path) {
-                $data['image_url'] = $image_path;
-            }
-        }
-
-        $result = $this->ingredient->create($data);
-        
-        if ($result['success']) {
-            $_SESSION['success'] = $result['message'];
-        } else {
-            $_SESSION['error'] = $result['message'];
-        }
-
+        $result = $this->ingredient->create([
+            'name'              => $_POST['name']              ?? '',
+            'category'          => $_POST['category']          ?? '',
+            'calories_per_unit' => $_POST['calories_per_unit'] ?? 0,
+            'unit'              => $_POST['unit']              ?? 'piece',
+            'image_url'         => $imageUrl,
+        ]);
+        $result['success'] ? flashSuccess($result['message']) : flashError($result['message']);
         redirect(BASE_URL . 'views/admin/ingredients.php');
     }
 
-    /**
-     * Update ingredient
-     */
-    public function updateIngredient($ingredient_id) {
-        if (!isAdmin()) {
-            $_SESSION['error'] = 'Admin access required';
-            redirect(BASE_URL . 'views/admin/login.php');
+    public function updateIngredient(int $id): void {
+        requireAdmin();
+        if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+            flashError('Security token mismatch.'); redirect(BASE_URL . 'views/admin/ingredients.php');
         }
 
-        $data = [
-            'name' => sanitize($_POST['name'] ?? ''),
-            'category' => sanitize($_POST['category'] ?? ''),
-            'calories_per_unit' => floatval($_POST['calories_per_unit'] ?? 0),
-            'unit' => sanitize($_POST['unit'] ?? 'gram'),
-            'image_url' => sanitize($_POST['image_url'] ?? '')
-        ];
-
-        // Handle image upload
-        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-            $old_ingredient = $this->ingredient->getById($ingredient_id);
-            if ($old_ingredient && $old_ingredient['image_url']) {
-                deleteImage($old_ingredient['image_url']);
-            }
-            
-            $image_path = uploadImage($_FILES['image'], 'ingredients');
-            if ($image_path) {
-                $data['image_url'] = $image_path;
-            }
+        $existing = $this->ingredient->getById($id);
+        $imageUrl = $this->handleImageUpload('ingredient');
+        if (!$imageUrl) {
+            $urlField = sanitize($_POST['image_url'] ?? '');
+            $imageUrl = $urlField ?: ($existing['image_url'] ?? '');
         }
 
-        if ($this->ingredient->update($ingredient_id, $data)) {
-            $_SESSION['success'] = 'Ingredient updated successfully';
-        } else {
-            $_SESSION['error'] = 'Failed to update ingredient';
-        }
-
+        $result = $this->ingredient->update($id, [
+            'name'              => $_POST['name']              ?? '',
+            'category'          => $_POST['category']          ?? '',
+            'calories_per_unit' => $_POST['calories_per_unit'] ?? 0,
+            'unit'              => $_POST['unit']              ?? 'piece',
+            'image_url'         => $imageUrl,
+        ]);
+        $result['success'] ? flashSuccess($result['message']) : flashError($result['message']);
         redirect(BASE_URL . 'views/admin/ingredients.php');
     }
 
-    /**
-     * Delete ingredient
-     */
-    public function deleteIngredient($ingredient_id) {
-        if (!isAdmin()) {
-            $_SESSION['error'] = 'Admin access required';
-            redirect(BASE_URL . 'views/admin/login.php');
+    public function deleteIngredient(int $id): void {
+        requireAdmin();
+        $ing = $this->ingredient->getById($id);
+        if ($ing && $ing['image_url'] && !str_starts_with($ing['image_url'], 'http')) {
+            deleteImage($ing['image_url']);
         }
-
-        $ingredient = $this->ingredient->getById($ingredient_id);
-        if ($ingredient && $ingredient['image_url']) {
-            deleteImage($ingredient['image_url']);
-        }
-
-        if ($this->ingredient->delete($ingredient_id)) {
-            $_SESSION['success'] = 'Ingredient deleted successfully';
-        } else {
-            $_SESSION['error'] = 'Failed to delete ingredient';
-        }
-
+        $this->ingredient->delete($id)
+            ? flashSuccess('Ingredient deleted.')
+            : flashError('Could not delete ingredient.');
         redirect(BASE_URL . 'views/admin/ingredients.php');
     }
 
-    /**
-     * Respond to feedback
-     */
-    public function respondToFeedback($feedback_id) {
-        if (!isAdmin()) {
-            $_SESSION['error'] = 'Admin access required';
-            redirect(BASE_URL . 'views/admin/login.php');
-        }
+    /* ── Users ──────────────────────────────────────────────── */
 
+    public function deactivateUser(int $id): void {
+        requireAdmin();
+        $this->user->deactivate($id)
+            ? flashSuccess('User deactivated.')
+            : flashError('Could not deactivate user.');
+        redirect(BASE_URL . 'views/admin/users.php');
+    }
+
+    public function activateUser(int $id): void {
+        requireAdmin();
+        $this->user->activate($id)
+            ? flashSuccess('User activated.')
+            : flashError('Could not activate user.');
+        redirect(BASE_URL . 'views/admin/users.php');
+    }
+
+    public function deleteUser(int $id): void {
+        requireAdmin();
+        $this->user->delete($id)
+            ? flashSuccess('User deleted permanently.')
+            : flashError('Could not delete user.');
+        redirect(BASE_URL . 'views/admin/users.php');
+    }
+
+    /* ── Feedback ───────────────────────────────────────────── */
+
+    public function respondToFeedback(int $id): void {
+        requireAdmin();
+        if (!verifyCSRFToken($_POST['csrf_token'] ?? '')) {
+            flashError('Security token mismatch.'); redirect(BASE_URL . 'views/admin/feedback.php');
+        }
         $response = sanitize($_POST['admin_response'] ?? '');
-        $status = sanitize($_POST['status'] ?? 'responded');
-
-        if (empty($response)) {
-            $_SESSION['error'] = 'Response cannot be empty';
-            redirect(BASE_URL . 'views/admin/feedback.php');
-        }
-
-        if ($this->feedback->update($feedback_id, $response, $status)) {
-            $_SESSION['success'] = 'Response saved successfully';
-        } else {
-            $_SESSION['error'] = 'Failed to save response';
-        }
-
+        $status   = in_array($_POST['status'] ?? '', ['responded','resolved']) ? $_POST['status'] : 'responded';
+        if (empty($response)) { flashError('Response cannot be empty.'); redirect(BASE_URL . 'views/admin/feedback.php'); }
+        $this->feedback->respond($id, $response, $status)
+            ? flashSuccess('Response sent.')
+            : flashError('Could not save response.');
         redirect(BASE_URL . 'views/admin/feedback.php');
     }
+
+    public function deleteFeedback(int $id): void {
+        requireAdmin();
+        $this->feedback->delete($id)
+            ? flashSuccess('Feedback deleted.')
+            : flashError('Could not delete.');
+        redirect(BASE_URL . 'views/admin/feedback.php');
+    }
+
+    /* ── Helpers ────────────────────────────────────────────── */
 
     /**
-     * Delete feedback
+     * Handle image upload OR URL.
+     * Returns stored path/URL string, or '' if nothing provided.
      */
-    public function deleteFeedback($feedback_id) {
-        if (!isAdmin()) {
-            $_SESSION['error'] = 'Admin access required';
-            redirect(BASE_URL . 'views/admin/login.php');
+    private function handleImageUpload(string $type): string {
+        $fileKey = 'image_file';
+        if (isset($_FILES[$fileKey]) && $_FILES[$fileKey]['error'] === UPLOAD_ERR_OK) {
+            $path = uploadImage($_FILES[$fileKey], $type . 's');
+            return $path ?: '';
         }
+        return '';
+    }
 
-        if ($this->feedback->delete($feedback_id)) {
-            $_SESSION['success'] = 'Feedback deleted successfully';
-        } else {
-            $_SESSION['error'] = 'Failed to delete feedback';
+    /** Parse ingredient_ids[] + quantities[] arrays from form */
+    private function parseIngredientRows(): array {
+        $ids = $_POST['ingredient_ids']  ?? [];
+        $qty = $_POST['quantities']      ?? [];
+        $rows = [];
+        foreach ($ids as $i => $ingId) {
+            $ingId = (int) $ingId;
+            $q     = (float) ($qty[$i] ?? 1);
+            if ($ingId > 0 && $q > 0) {
+                $rows[] = ['ingredient_id' => $ingId, 'quantity' => $q];
+            }
         }
-
-        redirect(BASE_URL . 'views/admin/feedback.php');
+        return $rows;
     }
 }
 
-// Handle POST requests
+/* ── Route ──────────────────────────────────────────────────── */
+$ctrl = new AdminController();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    $controller = new AdminController();
-    
-    switch ($_POST['action']) {
-        case 'admin_register':
-            $controller->register();
-            break;
-        case 'admin_login':
-            $controller->login();
-            break;
-        case 'create_recipe':
-            $controller->createRecipe();
-            break;
-        case 'update_recipe':
-            $recipe_id = isset($_POST['recipe_id']) ? intval($_POST['recipe_id']) : 0;
-            if ($recipe_id > 0) {
-                $controller->updateRecipe($recipe_id);
-            }
-            break;
-        case 'create_ingredient':
-            $controller->createIngredient();
-            break;
-        case 'update_ingredient':
-            $ingredient_id = isset($_POST['ingredient_id']) ? intval($_POST['ingredient_id']) : 0;
-            if ($ingredient_id > 0) {
-                $controller->updateIngredient($ingredient_id);
-            }
-            break;
-        case 'respond_feedback':
-            $feedback_id = isset($_POST['feedback_id']) ? intval($_POST['feedback_id']) : 0;
-            if ($feedback_id > 0) {
-                $controller->respondToFeedback($feedback_id);
-            }
-            break;
-        default:
-            redirect(BASE_URL . 'views/admin/dashboard.php');
-    }
+    match ($_POST['action']) {
+        'admin_login'         => $ctrl->login(),
+        'create_recipe'       => $ctrl->createRecipe(),
+        'update_recipe'       => $ctrl->updateRecipe((int)($_POST['recipe_id'] ?? 0)),
+        'create_ingredient'   => $ctrl->createIngredient(),
+        'update_ingredient'   => $ctrl->updateIngredient((int)($_POST['ingredient_id'] ?? 0)),
+        'respond_feedback'    => $ctrl->respondToFeedback((int)($_POST['feedback_id'] ?? 0)),
+        default               => redirect(BASE_URL . 'views/admin/dashboard.php'),
+    };
 }
 
-// Handle GET requests (delete actions and logout)
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action'])) {
-    $controller = new AdminController();
-    
-    switch ($_GET['action']) {
-        case 'delete_recipe':
-            $recipe_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-            if ($recipe_id > 0) {
-                $controller->deleteRecipe($recipe_id);
-            }
-            break;
-        case 'delete_ingredient':
-            $ingredient_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-            if ($ingredient_id > 0) {
-                $controller->deleteIngredient($ingredient_id);
-            }
-            break;
-        case 'delete_feedback':
-            $feedback_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-            if ($feedback_id > 0) {
-                $controller->deleteFeedback($feedback_id);
-            }
-            break;
-        case 'logout':
-            $controller->logout();
-            break;
-        default:
-            redirect(BASE_URL . 'views/admin/dashboard.php');
-    }
+    $id = (int)($_GET['id'] ?? 0);
+    match ($_GET['action']) {
+        'delete_recipe'     => $ctrl->deleteRecipe($id),
+        'delete_ingredient' => $ctrl->deleteIngredient($id),
+        'delete_feedback'   => $ctrl->deleteFeedback($id),
+        'deactivate_user'   => $ctrl->deactivateUser($id),
+        'activate_user'     => $ctrl->activateUser($id),
+        'delete_user'       => $ctrl->deleteUser($id),
+        'logout'            => $ctrl->logout(),
+        default             => redirect(BASE_URL . 'views/admin/dashboard.php'),
+    };
 }
-

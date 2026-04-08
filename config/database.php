@@ -1,60 +1,44 @@
 <?php
 /**
  * Database Configuration
- * Handles database connection and provides database instance
+ * Smart Pantry – A Recipe Recommendation System
+ * Database: smartpantry | Host: localhost | User: root | Pass: 1234
  */
 
 class Database {
-    private $host = 'localhost';
-    private $db_name = 'SmartPantryFull';
-    private $username = 'root';
-    private $password = '1234';
-    private $conn;
+    private string $host     = 'localhost';
+    private string $db_name  = 'smartpantry';
+    private string $username = 'root';
+    private string $password = '1234';
+    private ?PDO   $conn     = null;
 
-    /**
-     * Get database connection
-     * @return PDO|null
-     */
-    public function getConnection() {
-        $this->conn = null;
-
+    public function getConnection(): ?PDO {
+        if ($this->conn !== null) return $this->conn;
         try {
             $this->conn = new PDO(
-                "mysql:host=" . $this->host . ";dbname=" . $this->db_name . ";charset=utf8mb4",
+                "mysql:host={$this->host};dbname={$this->db_name};charset=utf8mb4",
                 $this->username,
                 $this->password,
                 [
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_EMULATE_PREPARES => false
+                    PDO::ATTR_EMULATE_PREPARES   => false,
                 ]
             );
-        } catch(PDOException $e) {
-            $errorMsg = "Connection Error: " . $e->getMessage();
-            error_log($errorMsg);
-            
-            // Log more specific error information
-            if (strpos($e->getMessage(), "Unknown database") !== false) {
-                error_log("Database '{$this->db_name}' does not exist. Please create it and import schema.sql");
-            } elseif (strpos($e->getMessage(), "Access denied") !== false) {
-                error_log("Database access denied. Check username/password in config/database.php");
-            } elseif (strpos($e->getMessage(), "Connection refused") !== false) {
-                error_log("MySQL service is not running. Please start MySQL in XAMPP");
-            }
-            
+        } catch (PDOException $e) {
+            error_log('DB Connection Error: ' . $e->getMessage());
             return null;
         }
-
         return $this->conn;
     }
 }
 
-// Create global database instance
-function getDB() {
-    static $database = null;
-    if ($database === null) {
+/** Singleton helper — use getDB() everywhere */
+function getDB(): ?PDO {
+    static $db = null;
+    if ($db === null) {
         $database = new Database();
+        $db = $database->getConnection();
     }
-    return $database->getConnection();
+    return $db;
 }
-

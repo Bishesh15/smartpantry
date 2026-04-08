@@ -1,13 +1,14 @@
-    </main>
 
-    <footer class="main-footer">
-        <div class="container">
-            <p>&copy; <?php echo date('Y'); ?> Smart Pantry Admin Panel. All rights reserved.</p>
-        </div>
-    </footer>
+  <!-- End admin-main -->
+</main>
+</div><!-- End admin-wrap -->
 
-    <script src="<?php echo ASSETS_PATH; ?>js/validation.js"></script>
-    <script src="<?php echo ASSETS_PATH; ?>js/main.js"></script>
+<!-- Bootstrap 5 JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- SmartPantry JS -->
+<script>
+  document.documentElement.dataset.baseUrl = '<?= BASE_URL ?>';
+</script>
+<script src="<?= ASSETS_PATH ?>js/main.js"></script>
 </body>
 </html>
-

@@ -1,136 +1,142 @@
 <?php
-$page_title = 'Manage Ingredients';
-require_once __DIR__ . '/../includes/admin-header.php';
+$page_title = 'Ingredients';
+require_once __DIR__ . '/../../includes/session.php';
 require_once __DIR__ . '/../../includes/functions.php';
+require_once __DIR__ . '/../../config/constants.php';
 require_once __DIR__ . '/../../models/Ingredient.php';
 
-// Require admin login - redirect if not logged in
-if (!isAdmin() && !isLoggedIn()) {
-    redirect(BASE_URL . 'views/admin/login.php');
-}
-// If user tries to access, show error but allow viewing
-if (isLoggedIn() && !isAdmin()) {
-    $_SESSION['error'] = 'You are logged in as a regular user. This is an admin-only page. Please logout first to access admin panel.';
-}
+require_once __DIR__ . '/../includes/admin-header.php';
 
-$ingredient = new Ingredient();
+$ingredientModel = new Ingredient();
+$allIngredients  = $ingredientModel->getAll();
+$grouped         = [];
+foreach ($allIngredients as $i) { $grouped[$i['category']][] = $i; }
 
-$action = isset($_GET['action']) ? $_GET['action'] : 'list';
-$ingredient_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-
-$ingredients = $ingredient->getAll();
-$current_ingredient = null;
-
-if ($action === 'edit' && $ingredient_id > 0) {
-    $current_ingredient = $ingredient->getById($ingredient_id);
+$editIng = null;
+if (!empty($_GET['edit'])) {
+    $editIng = $ingredientModel->getById((int)$_GET['edit']);
 }
 ?>
 
-<div class="container">
-    <div class="admin-page">
-        <div class="admin-header">
-            <h1>Manage Ingredients</h1>
-            <a href="<?php echo BASE_URL; ?>views/admin/dashboard.php" class="btn btn-secondary">Back to Dashboard</a>
+<!-- Add New Ingredient -->
+<div class="admin-card mb-4" id="addIngredientPanel">
+  <div class="admin-card-header">
+    <i class="bi bi-<?= $editIng ? 'pencil' : 'plus-circle' ?> me-2"></i>
+    <?= $editIng ? 'Edit: ' . htmlspecialchars($editIng['name']) : 'Add New Ingredient' ?>
+  </div>
+  <div class="admin-card-body">
+    <form method="POST" action="<?= BASE_URL ?>controllers/AdminController.php" enctype="multipart/form-data">
+      <?php if ($editIng): ?>
+        <input type="hidden" name="action" value="update_ingredient">
+        <input type="hidden" name="ingredient_id" value="<?= $editIng['id'] ?>">
+      <?php else: ?>
+        <input type="hidden" name="action" value="create_ingredient">
+      <?php endif; ?>
+      <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+
+      <div class="row g-3 align-items-start">
+        <div class="col-sm-4">
+          <label class="admin-label">Ingredient Name *</label>
+          <input type="text" name="name" class="admin-input" required
+                 value="<?= htmlspecialchars($editIng['name'] ?? '') ?>"
+                 placeholder="e.g. Bell Pepper">
         </div>
-
-        <?php if ($action === 'add' || $action === 'edit'): ?>
-            <!-- Add/Edit Ingredient Form -->
-            <div class="admin-form-container">
-                <h2><?php echo $action === 'add' ? 'Add New Ingredient' : 'Edit Ingredient'; ?></h2>
-                
-                <form method="POST" action="<?php echo BASE_URL; ?>controllers/AdminController.php" enctype="multipart/form-data" class="admin-form">
-                    <input type="hidden" name="action" value="<?php echo $action === 'add' ? 'create_ingredient' : 'update_ingredient'; ?>">
-                    <?php if ($action === 'edit'): ?>
-                        <input type="hidden" name="ingredient_id" value="<?php echo $ingredient_id; ?>">
-                    <?php endif; ?>
-
-                    <div class="form-group">
-                        <label>Ingredient Name *</label>
-                        <input type="text" name="name" required 
-                               value="<?php echo $current_ingredient ? htmlspecialchars($current_ingredient['name']) : ''; ?>">
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>Category *</label>
-                            <select name="category" required>
-                                <?php foreach (INGREDIENT_CATEGORIES as $cat): ?>
-                                    <option value="<?php echo $cat; ?>" 
-                                            <?php echo ($current_ingredient && $current_ingredient['category'] === $cat) ? 'selected' : ''; ?>>
-                                        <?php echo $cat; ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label>Unit *</label>
-                            <input type="text" name="unit" required 
-                                   value="<?php echo $current_ingredient ? htmlspecialchars($current_ingredient['unit']) : 'gram'; ?>">
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Calories per Unit *</label>
-                        <input type="number" name="calories_per_unit" step="0.01" min="0" required 
-                               value="<?php echo $current_ingredient ? $current_ingredient['calories_per_unit'] : ''; ?>">
-                    </div>
-
-                    <div class="form-group">
-                        <label>Image</label>
-                        <input type="file" name="image" accept="image/*">
-                        <?php if ($current_ingredient && $current_ingredient['image_url']): ?>
-                            <p>Current: <?php echo htmlspecialchars($current_ingredient['image_url']); ?></p>
-                        <?php endif; ?>
-                        <input type="hidden" name="image_url" value="<?php echo $current_ingredient ? htmlspecialchars($current_ingredient['image_url']) : ''; ?>">
-                    </div>
-
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary"><?php echo $action === 'add' ? 'Create Ingredient' : 'Update Ingredient'; ?></button>
-                        <a href="<?php echo BASE_URL; ?>views/admin/ingredients.php" class="btn btn-secondary">Cancel</a>
-                    </div>
-                </form>
-            </div>
-        <?php else: ?>
-            <!-- Ingredient List -->
-            <div class="admin-list-header">
-                <a href="<?php echo BASE_URL; ?>views/admin/ingredients.php?action=add" class="btn btn-primary">Add New Ingredient</a>
-            </div>
-
-            <div class="admin-table-container">
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Name</th>
-                            <th>Category</th>
-                            <th>Calories/Unit</th>
-                            <th>Unit</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($ingredients as $ing): ?>
-                            <tr>
-                                <td><?php echo $ing['id']; ?></td>
-                                <td><?php echo htmlspecialchars($ing['name']); ?></td>
-                                <td><?php echo htmlspecialchars($ing['category']); ?></td>
-                                <td><?php echo number_format($ing['calories_per_unit'], 2); ?></td>
-                                <td><?php echo htmlspecialchars($ing['unit']); ?></td>
-                                <td>
-                                    <a href="<?php echo BASE_URL; ?>views/admin/ingredients.php?action=edit&id=<?php echo $ing['id']; ?>" class="btn btn-small">Edit</a>
-                                    <a href="<?php echo BASE_URL; ?>controllers/AdminController.php?action=delete_ingredient&id=<?php echo $ing['id']; ?>" 
-                                       class="btn btn-small btn-danger" 
-                                       onclick="return confirm('Are you sure you want to delete this ingredient?');">Delete</a>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php endif; ?>
-    </div>
+        <div class="col-sm-3">
+          <label class="admin-label">Category *</label>
+          <select name="category" class="admin-input" required>
+            <?php foreach (INGREDIENT_CATEGORIES as $cat): ?>
+              <option value="<?= $cat ?>" <?= ($editIng['category'] ?? '') === $cat ? 'selected' : '' ?>><?= $cat ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="col-sm-2">
+          <label class="admin-label">Calories/Unit</label>
+          <input type="number" name="calories_per_unit" class="admin-input" step="0.01" min="0" required
+                 value="<?= $editIng['calories_per_unit'] ?? 0 ?>" placeholder="0.00">
+        </div>
+        <div class="col-sm-3">
+          <label class="admin-label">Unit</label>
+          <input type="text" name="unit" class="admin-input" required
+                 value="<?= htmlspecialchars($editIng['unit'] ?? 'piece') ?>"
+                 placeholder="piece / cup / tsp / tbsp / gram">
+        </div>
+        <div class="col-sm-6">
+          <label class="admin-label">Image — Upload File</label>
+          <input type="file" name="image_file" class="admin-input" accept="image/*">
+        </div>
+        <div class="col-sm-6">
+          <label class="admin-label">— OR Image URL —</label>
+          <input type="text" name="image_url" class="admin-input"
+                 placeholder="https://…"
+                 value="<?= htmlspecialchars(str_starts_with($editIng['image_url'] ?? '', 'http') ? $editIng['image_url'] : '') ?>">
+        </div>
+        <div class="col-12">
+          <button type="submit" class="btn-admin-primary">
+            <i class="bi bi-check-circle me-1"></i>
+            <?= $editIng ? 'Update Ingredient' : 'Add Ingredient' ?>
+          </button>
+          <?php if ($editIng): ?>
+            <a href="<?= BASE_URL ?>views/admin/ingredients.php" class="btn-admin-secondary ms-2">Cancel</a>
+          <?php endif; ?>
+        </div>
+      </div>
+    </form>
+  </div>
 </div>
 
-<?php require_once __DIR__ . '/../includes/admin-footer.php'; ?>
+<!-- Ingredient Table -->
+<div class="admin-card">
+  <div class="admin-card-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-basket me-2"></i>All Ingredients (<?= count($allIngredients) ?>)</span>
+    <input type="text" id="ingSearch" class="admin-input" placeholder="Filter…" style="max-width:220px;padding:.4rem .75rem;">
+  </div>
+  <table class="admin-table">
+    <thead>
+      <tr><th>Name</th><th>Category</th><th>Calories/Unit</th><th>Unit</th><th>Image</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+      <?php foreach ($allIngredients as $ing): ?>
+        <tr class="ing-row" data-name="<?= strtolower(htmlspecialchars($ing['name'])) ?>">
+          <td class="fw-bold"><?= htmlspecialchars($ing['name']) ?></td>
+          <td>
+            <span class="badge bg-light text-dark border"><?= htmlspecialchars($ing['category']) ?></span>
+          </td>
+          <td><?= $ing['calories_per_unit'] ?> kcal</td>
+          <td class="text-muted">per <?= htmlspecialchars($ing['unit']) ?></td>
+          <td>
+            <?php if (!empty($ing['image_url'])): ?>
+              <img src="<?= resolveImageUrl($ing['image_url']) ?>"
+                   style="width:40px;height:40px;border-radius:8px;object-fit:cover;"
+                   onerror="this.style.display='none'">
+            <?php else: ?>
+              <span class="text-muted small">—</span>
+            <?php endif; ?>
+          </td>
+          <td>
+            <div class="d-flex gap-1">
+              <a href="?edit=<?= $ing['id'] ?>" class="btn-admin-warning btn-sm">
+                <i class="bi bi-pencil"></i> Edit
+              </a>
+              <a href="<?= BASE_URL ?>controllers/AdminController.php?action=delete_ingredient&id=<?= $ing['id'] ?>"
+                 class="btn-admin-danger btn-sm"
+                 data-confirm="Delete '<?= htmlspecialchars($ing['name']) ?>'? This will remove it from all recipes.">
+                <i class="bi bi-trash"></i>
+              </a>
+            </div>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+</div>
 
+<script>
+document.getElementById('ingSearch')?.addEventListener('input', function() {
+  const term = this.value.toLowerCase();
+  document.querySelectorAll('.ing-row').forEach(r => {
+    r.style.display = r.dataset.name.includes(term) ? '' : 'none';
+  });
+});
+</script>
+
+<?php require_once __DIR__ . '/../includes/admin-footer.php'; ?>

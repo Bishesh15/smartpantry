@@ -1,218 +1,129 @@
 <?php
 /**
- * Recipe Controller
- * Handles recipe display, search, matching, and detail views
+ * RecipeController — Search, Match (SuperCook-style), Detail view
+ * Smart Pantry
  */
 
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../models/Recipe.php';
 require_once __DIR__ . '/../models/Ingredient.php';
-require_once __DIR__ . '/../models/Rating.php';
+require_once __DIR__ . '/../models/User.php';
 
 class RecipeController {
-    private $recipe;
-    private $ingredient;
-    private $rating;
+    private Recipe     $recipe;
+    private Ingredient $ingredient;
 
     public function __construct() {
-        $this->recipe = new Recipe();
+        $this->recipe     = new Recipe();
         $this->ingredient = new Ingredient();
-        $this->rating = new Rating();
     }
 
     /**
-     * Handle recipe matching based on selected ingredients
+     * Match recipes from selected ingredient IDs.
+     * Called by the main search form (POST) and by AJAX (api/match-recipes.php).
      */
-    public function matchRecipes() {
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
+    public function matchFromIngredients(
+        array  $ingredientIds,
+        string $dietFilter = '',
+        string $sortBy     = 'match'
+    ): array {
+        if (empty($ingredientIds)) return [];
 
-        $ingredient_ids = isset($_POST['ingredients']) && is_array($_POST['ingredients']) 
-            ? $_POST['ingredients'] : [];
-        
-        // Validate ingredient IDs
-        $valid_ids = [];
-        foreach ($ingredient_ids as $id) {
-            $valid_id = validateInteger($id, 1);
-            if ($valid_id !== false) {
-                $valid_ids[] = $valid_id;
+        $prefs = isLoggedIn()
+            ? getFoodPreferences($_SESSION['food_preferences'] ?? '')
+            : [];
+
+        return $this->recipe->getMatchingRecipes($ingredientIds, $prefs, $dietFilter, $sortBy);
+    }
+
+    /**
+     * Text search — tries ingredient resolution first, falls back to name/description search.
+     */
+    public function searchByText(string $term): array {
+        $term = trim($term);
+        if (empty($term)) return [];
+
+        // Try to resolve as ingredient name(s)
+        $ids = $this->ingredient->resolveNamesToIds($term);
+        if (!empty($ids)) {
+            $prefs = isLoggedIn() ? getFoodPreferences($_SESSION['food_preferences'] ?? '') : [];
+            return $this->recipe->getMatchingRecipes($ids, $prefs);
+        }
+        // Generic text search
+        return $this->recipe->search($term);
+    }
+
+    /**
+     * Load a recipe detail page — increments view counter, records user view.
+     */
+    public function viewDetail(int $id): ?array {
+        if ($id <= 0) return null;
+        $recipe = $this->recipe->getById($id);
+        if (!$recipe) return null;
+
+        // Attach ingredients list
+        $recipe['ingredients'] = $this->recipe->getIngredients($id);
+
+        // Attach similar recipes
+        $recipe['similar'] = $this->recipe->getSimilarRecipes($id, 4);
+
+        // Increment global view count
+        $this->recipe->incrementViewCount($id);
+
+        // Record user view
+        if (isLoggedIn()) {
+            $userModel = new User();
+            $userModel->recordView($_SESSION['user_id'], $id);
+
+            // Mark matched / missing vs user pantry
+            $pantryIds = $userModel->getPantryIngredientIds($_SESSION['user_id']);
+            foreach ($recipe['ingredients'] as &$ing) {
+                $ing['in_pantry'] = in_array((int)$ing['id'], array_map('intval', $pantryIds));
             }
-        }
-        
-        if (empty($valid_ids)) {
-            $_SESSION['error'] = 'Please select at least one valid ingredient';
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-        
-        $ingredient_ids = $valid_ids;
-
-        // Get user preferences if logged in
-        $user_preferences = [];
-        $dietary_restrictions = [];
-        
-        if (isLoggedIn()) {
-            $user_preferences = getFoodPreferences($_SESSION['food_preferences'] ?? '');
-            $dietary_restrictions = getDietaryRestrictions($_SESSION['dietary_restrictions'] ?? '');
-        }
-
-        // Get matching recipes
-        $recipes = $this->recipe->getMatchingRecipes($ingredient_ids, $user_preferences, $dietary_restrictions);
-        
-        $_SESSION['matched_recipes'] = $recipes;
-        $_SESSION['selected_ingredients'] = $ingredient_ids;
-        
-        redirect(BASE_URL . 'views/user/recipe-search.php');
-    }
-
-    /**
-     * Handle recipe search
-     */
-    public function search() {
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-
-        $search_term = isset($_POST['search']) ? sanitize($_POST['search']) : '';
-        
-        if (empty($search_term)) {
-            $_SESSION['error'] = 'Please enter a search term';
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-
-        $recipes = $this->recipe->search($search_term);
-        
-        $_SESSION['search_results'] = $recipes;
-        $_SESSION['search_term'] = $search_term;
-        
-        redirect(BASE_URL . 'views/user/recipe-search.php');
-    }
-
-    /**
-     * Handle recipe detail view
-     */
-    public function viewDetail($recipe_id) {
-        // Validate recipe ID
-        $recipe_id = validateInteger($recipe_id, 1);
-        if ($recipe_id === false) {
-            $_SESSION['error'] = 'Invalid recipe ID';
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-        
-        $recipe = $this->recipe->getById($recipe_id);
-        
-        if (!$recipe) {
-            $_SESSION['error'] = 'Recipe not found';
-            redirect(BASE_URL . 'views/user/recipe-search.php');
-        }
-
-        // Get recipe ingredients
-        $ingredients = $this->recipe->getIngredients($recipe_id);
-        $recipe['ingredients'] = $ingredients;
-
-        // Get ratings
-        $ratings = $this->rating->getRecipeRatings($recipe_id);
-        $recipe['ratings'] = $ratings;
-
-        // Get user's rating if logged in
-        $user_rating = null;
-        if (isLoggedIn()) {
-            $user_rating = $this->rating->getUserRating($_SESSION['user_id'], $recipe_id);
-        }
-
-        // Track recent view if logged in
-        if (isLoggedIn()) {
-            $this->trackRecentView($_SESSION['user_id'], $recipe_id);
+            unset($ing);
         }
 
         return $recipe;
     }
-
-    /**
-     * Track recent recipe view
-     * @param int $user_id
-     * @param int $recipe_id
-     */
-    private function trackRecentView($user_id, $recipe_id) {
-        try {
-            $conn = getDB();
-            
-            // Check if view already exists today
-            $query = "SELECT id FROM recent_views 
-                      WHERE user_id = :user_id AND recipe_id = :recipe_id 
-                      AND DATE(viewed_at) = CURDATE() 
-                      LIMIT 1";
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $stmt->bindParam(':recipe_id', $recipe_id, PDO::PARAM_INT);
-            $stmt->execute();
-            
-            if ($stmt->rowCount() == 0) {
-                // Insert new view
-                $query = "INSERT INTO recent_views (user_id, recipe_id) 
-                          VALUES (:user_id, :recipe_id)";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-                $stmt->bindParam(':recipe_id', $recipe_id, PDO::PARAM_INT);
-                $stmt->execute();
-            } else {
-                // Update existing view timestamp
-                $query = "UPDATE recent_views 
-                          SET viewed_at = CURRENT_TIMESTAMP 
-                          WHERE user_id = :user_id AND recipe_id = :recipe_id 
-                          AND DATE(viewed_at) = CURDATE()";
-                $stmt = $conn->prepare($query);
-                $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-                $stmt->bindParam(':recipe_id', $recipe_id, PDO::PARAM_INT);
-                $stmt->execute();
-            }
-        } catch (PDOException $e) {
-            error_log("Track Recent View Error: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * Get recently viewed recipes for user
-     * @param int $user_id
-     * @param int $limit
-     * @return array
-     */
-    public function getRecentViews($user_id, $limit = 5) {
-        try {
-            $conn = getDB();
-            $query = "SELECT r.*, rv.viewed_at 
-                      FROM recipes r
-                      INNER JOIN recent_views rv ON r.id = rv.recipe_id
-                      WHERE rv.user_id = :user_id
-                      ORDER BY rv.viewed_at DESC
-                      LIMIT :limit";
-            
-            $stmt = $conn->prepare($query);
-            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
-            $stmt->execute();
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            error_log("Get Recent Views Error: " . $e->getMessage());
-            return [];
-        }
-    }
 }
 
-// Handle requests
+/* ── Route (for direct form POST) ───────────────────────────── */
+$ctrl = new RecipeController();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    $controller = new RecipeController();
-    
-    switch ($_POST['action']) {
-        case 'match':
-            $controller->matchRecipes();
-            break;
-        case 'search':
-            $controller->search();
-            break;
-        default:
+    if ($_POST['action'] === 'match') {
+        $ids        = array_map('intval', (array)($_POST['ingredients'] ?? []));
+        $ids        = array_filter($ids, fn($id) => $id > 0);
+        $dietFilter = sanitize($_POST['diet_type'] ?? '');
+        $sortBy     = sanitize($_POST['sort_by']   ?? 'match');
+
+        if (empty($ids)) {
+            flashError('Please select at least one ingredient.');
             redirect(BASE_URL . 'views/user/recipe-search.php');
+        }
+        $results = $ctrl->matchFromIngredients(array_values($ids), $dietFilter, $sortBy);
+
+        $_SESSION['match_results']        = $results;
+        $_SESSION['match_ingredient_ids'] = $ids;
+        $_SESSION['match_diet_filter']    = $dietFilter;
+        $_SESSION['match_sort_by']        = $sortBy;
+
+        redirect(BASE_URL . 'views/user/recipe-search.php');
+    }
+
+    if ($_POST['action'] === 'search') {
+        $term    = sanitize($_POST['search_term'] ?? '');
+        $results = $ctrl->searchByText($term);
+
+        $_SESSION['search_results'] = $results;
+        $_SESSION['search_term']    = $term;
+
+        redirect(BASE_URL . 'views/user/recipe-search.php');
     }
 }
 
+// Guard: Redirect direct GET access back to home
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && basename($_SERVER['PHP_SELF']) === 'RecipeController.php') {
+    redirect(BASE_URL . 'views/user/home.php');
+}

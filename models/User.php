@@ -1,494 +1,349 @@
 <?php
 /**
  * User Model
- * Handles user data and operations
+ * Smart Pantry – Handles user CRUD, pantry, favorites, recently viewed
  */
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 
 class User {
-    private $conn;
-    private $table = 'users';
+    private ?PDO   $db;
+    private string $table = 'users';
 
-    public $id;
-    public $username;
-    public $email;
-    public $password_hash;
-    public $food_preferences;
-    public $dietary_restrictions;
-    public $created_at;
+    public function __construct() { $this->db = getDB(); }
 
-    public function __construct() {
-        $this->conn = getDB();
-    }
+    /* ── Auth ───────────────────────────────────────────────── */
 
-    /**
-     * Register new user
-     */
-    public function register($username, $email, $password_hash, $food_preferences = '', $dietary_restrictions = '') {
-        if (empty($username) || empty($email) || empty($password_hash)) {
-            return ['success' => false, 'message' => 'All fields are required'];
+    public function register(array $data): array {
+        $username  = sanitize($data['username']  ?? '');
+        $fullName  = sanitize($data['full_name'] ?? '');
+        $email     = sanitize($data['email']     ?? '');
+        $password  = $data['password'] ?? '';
+
+        if (empty($username) || empty($fullName) || empty($email) || empty($password)) {
+            return ['success' => false, 'message' => 'All fields are required.'];
         }
-
+        if (!validateUsername($username)) {
+            return ['success' => false, 'message' => 'Username must be 3–30 characters (letters, numbers, underscore).'];
+        }
         if (!validateEmail($email)) {
-            return ['success' => false, 'message' => 'Invalid email format'];
+            return ['success' => false, 'message' => 'Invalid email address.'];
+        }
+        if (strlen($password) < 6) {
+            return ['success' => false, 'message' => 'Password must be at least 6 characters.'];
+        }
+        if ($this->existsByColumn('username', $username)) {
+            return ['success' => false, 'message' => 'Username already taken.'];
+        }
+        if ($this->existsByColumn('email', $email)) {
+            return ['success' => false, 'message' => 'Email already registered.'];
         }
 
-        if ($this->usernameExists($username)) {
-            return ['success' => false, 'message' => 'Username already exists'];
-        }
+        $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+        $st   = $this->db->prepare(
+            "INSERT INTO {$this->table} (full_name, username, email, password) VALUES (?,?,?,?)"
+        );
+        $st->execute([$fullName, $username, $email, $hash]);
+        return ['success' => true, 'message' => 'Registration successful! Please log in.', 'user_id' => (int)$this->db->lastInsertId()];
+    }
 
-        if ($this->emailExists($email)) {
-            return ['success' => false, 'message' => 'Email already exists'];
-        }
-
-        $server_hash = password_hash($password_hash, PASSWORD_BCRYPT);
-
+    public function login(string $username, string $password): array {
         $username = sanitize($username);
-        $email = sanitize($email);
-        $food_preferences = sanitize($food_preferences);
-        $dietary_restrictions = sanitize($dietary_restrictions);
-
-        try {
-            $query = "INSERT INTO " . $this->table . " 
-                      (username, email, password_hash, food_preferences, dietary_restrictions) 
-                      VALUES (:username, :email, :password_hash, :food_preferences, :dietary_restrictions)";
-
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $username);
-            $stmt->bindParam(':email', $email);
-            $stmt->bindParam(':password_hash', $server_hash);
-            $stmt->bindParam(':food_preferences', $food_preferences);
-            $stmt->bindParam(':dietary_restrictions', $dietary_restrictions);
-
-            if ($stmt->execute()) {
-                $user_id = $this->conn->lastInsertId();
-                return ['success' => true, 'message' => 'Registration successful', 'user_id' => $user_id];
-            }
-
-            return ['success' => false, 'message' => 'Registration failed'];
-        } catch (PDOException $e) {
-            error_log("Registration Error: " . $e->getMessage());
-            return ['success' => false, 'message' => 'Database error occurred'];
+        if (empty($username) || empty($password)) {
+            return ['success' => false, 'message' => 'Username and password are required.'];
         }
+        $st = $this->db->prepare(
+            "SELECT * FROM {$this->table} WHERE username = ? LIMIT 1"
+        );
+        $st->execute([$username]);
+        $user = $st->fetch();
+
+        if (!$user || !password_verify($password, $user['password'])) {
+            return ['success' => false, 'message' => 'Invalid username or password.'];
+        }
+        if ($user['status'] === 'deactivated') {
+            return ['success' => false, 'message' => 'Your account has been deactivated. Contact support.'];
+        }
+
+        return $this->establishSession($user);
     }
 
-    /**
-     * Login user
-     */
-    public function login($username, $password_hash) {
-        if (empty($username) || empty($password_hash)) {
-            return ['success' => false, 'message' => 'Username and password are required'];
-        }
-
-        $username = sanitize($username);
-
-        try {
-            $query = "SELECT id, username, email, password_hash, food_preferences, dietary_restrictions 
-                      FROM " . $this->table . " 
-                      WHERE username = :username LIMIT 1";
-
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $username);
-            $stmt->execute();
-
-            if ($stmt->rowCount() > 0) {
-                $row = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                if (password_verify($password_hash, $row['password_hash'])) {
-                    $_SESSION['user_id'] = $row['id'];
-                    $_SESSION['username'] = $row['username'];
-                    $_SESSION['email'] = $row['email'];
-                    $_SESSION['food_preferences'] = $row['food_preferences'];
-                    $_SESSION['dietary_restrictions'] = $row['dietary_restrictions'];
-                    
-                    session_regenerate_id(true);
-
-                    return [
-                        'success' => true,
-                        'message' => 'Login successful',
-                        'user' => [
-                            'id' => $row['id'],
-                            'username' => $row['username'],
-                            'email' => $row['email']
-                        ]
-                    ];
-                }
-            }
-
-            return ['success' => false, 'message' => 'Invalid username or password'];
-        } catch (PDOException $e) {
-            error_log("Login Error: " . $e->getMessage());
-            return ['success' => false, 'message' => 'Database error occurred'];
-        }
+    public function findByGoogleId(string $googleId): ?array {
+        $st = $this->db->prepare("SELECT * FROM {$this->table} WHERE google_id = ? LIMIT 1");
+        $st->execute([$googleId]);
+        return $st->fetch() ?: null;
     }
 
-    /**
-     * Logout user
-     */
-    public function logout() {
-        unset($_SESSION['user_id']);
-        unset($_SESSION['username']);
-        unset($_SESSION['email']);
-        unset($_SESSION['food_preferences']);
-        unset($_SESSION['dietary_restrictions']);
+    public function findByEmail(string $email): ?array {
+        $st = $this->db->prepare("SELECT * FROM {$this->table} WHERE email = ? LIMIT 1");
+        $st->execute([$email]);
+        return $st->fetch() ?: null;
     }
 
-    /**
-     * Get user by ID
-     */
-    public function getUserById($user_id) {
-        try {
-            $query = "SELECT id, username, email, food_preferences, dietary_restrictions, created_at 
-                      FROM " . $this->table . " 
-                      WHERE id = :id LIMIT 1";
-
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':id', $user_id, PDO::PARAM_INT);
-            $stmt->execute();
-
-            if ($stmt->rowCount() > 0) {
-                return $stmt->fetch(PDO::FETCH_ASSOC);
-            }
-
-            return null;
-        } catch (PDOException $e) {
-            error_log("Get User Error: " . $e->getMessage());
-            return null;
-        }
+    public function linkGoogleAccount(int $userId, string $googleId): bool {
+        $st = $this->db->prepare("UPDATE {$this->table} SET google_id = ? WHERE id = ?");
+        return $st->execute([$googleId, $userId]);
     }
 
-    /**
-     * Update user preferences
-     */
-    public function updatePreferences($user_id, $food_preferences, $dietary_restrictions) {
-        try {
-            $query = "UPDATE " . $this->table . " 
-                      SET food_preferences = :food_preferences, 
-                          dietary_restrictions = :dietary_restrictions 
-                      WHERE id = :id";
-
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':id', $user_id, PDO::PARAM_INT);
-            $stmt->bindParam(':food_preferences', $food_preferences);
-            $stmt->bindParam(':dietary_restrictions', $dietary_restrictions);
-
-            if ($stmt->execute()) {
-                $_SESSION['food_preferences'] = $food_preferences;
-                $_SESSION['dietary_restrictions'] = $dietary_restrictions;
-                return true;
-            }
-
-            return false;
-        } catch (PDOException $e) {
-            error_log("Update Preferences Error: " . $e->getMessage());
-            return false;
+    public function registerGoogleUser(array $data): array {
+        $email    = sanitize($data['email']);
+        $fullName = sanitize($data['full_name']);
+        $googleId = sanitize($data['google_id']);
+        
+        // Auto-generate a username from email (e.g. sita_devi@test.com -> sita_devi_g)
+        $username = explode('@', $email)[0] . '_g';
+        
+        // Ensure username is unique
+        $original = $username;
+        $count = 1;
+        while ($this->existsByColumn('username', $username)) {
+            $username = $original . $count++;
         }
+
+        $st = $this->db->prepare(
+            "INSERT INTO {$this->table} (full_name, username, email, google_id) VALUES (?,?,?,?)"
+        );
+        $st->execute([$fullName, $username, $email, $googleId]);
+        
+        $userId = (int)$this->db->lastInsertId();
+        $user = $this->getById($userId);
+        return $this->establishSession($user);
     }
 
-    /**
-     * Update username
-     */
-    public function updateUsername($user_id, $new_username) {
-        $new_username = sanitize($new_username);
-        if (empty($new_username) || strlen($new_username) < 3) {
-            return ['success' => false, 'message' => 'Username must be at least 3 characters'];
-        }
-        if ($this->usernameExists($new_username)) {
-            return ['success' => false, 'message' => 'Username already taken'];
-        }
-        try {
-            $query = "UPDATE " . $this->table . " SET username = :username WHERE id = :id";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $new_username);
-            $stmt->bindParam(':id', $user_id, PDO::PARAM_INT);
-            if ($stmt->execute()) {
-                $_SESSION['username'] = $new_username;
-                return ['success' => true, 'message' => 'Username updated successfully'];
-            }
-            return ['success' => false, 'message' => 'Failed to update username'];
-        } catch (PDOException $e) {
-            error_log("Update Username Error: " . $e->getMessage());
-            return ['success' => false, 'message' => 'Database error occurred'];
-        }
+    public function establishSession(array $user): array {
+        $_SESSION['user_id']   = $user['id'];
+        $_SESSION['username']  = $user['username'];
+        $_SESSION['full_name'] = $user['full_name'];
+        $_SESSION['email']     = $user['email'];
+        $_SESSION['food_preferences']    = $user['food_preferences']    ?? '';
+        $_SESSION['dietary_restrictions']= $user['dietary_restrictions'] ?? '';
+
+        session_regenerate_id(true);
+        return ['success' => true, 'message' => 'Login successful!', 'user' => $user];
     }
 
-    /**
-     * Update password (expects pre-hashed from client bcrypt)
-     */
-    public function updatePassword($user_id, $current_password_hash, $new_password_hash) {
-        try {
-            // Verify current password
-            $query = "SELECT password_hash FROM " . $this->table . " WHERE id = :id LIMIT 1";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':id', $user_id, PDO::PARAM_INT);
-            $stmt->execute();
-            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    /* ── Getters ────────────────────────────────────────────── */
 
-            if (!$row || !password_verify($current_password_hash, $row['password_hash'])) {
-                return ['success' => false, 'message' => 'Current password is incorrect'];
-            }
-
-            $server_hash = password_hash($new_password_hash, PASSWORD_BCRYPT);
-            $query = "UPDATE " . $this->table . " SET password_hash = :password_hash WHERE id = :id";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':password_hash', $server_hash);
-            $stmt->bindParam(':id', $user_id, PDO::PARAM_INT);
-            if ($stmt->execute()) {
-                return ['success' => true, 'message' => 'Password updated successfully'];
-            }
-            return ['success' => false, 'message' => 'Failed to update password'];
-        } catch (PDOException $e) {
-            error_log("Update Password Error: " . $e->getMessage());
-            return ['success' => false, 'message' => 'Database error occurred'];
-        }
+    public function getById(int $id): ?array {
+        $st = $this->db->prepare(
+            "SELECT id, full_name, username, email, food_preferences,
+                    dietary_restrictions, daily_calorie_goal, status, created_at
+             FROM {$this->table} WHERE id = ? LIMIT 1"
+        );
+        $st->execute([$id]);
+        return $st->fetch() ?: null;
     }
 
-    /**
-     * Get user's favorite recipes
-     */
-    public function getFavorites($user_id, $limit = 10) {
-        try {
-            $query = "SELECT r.* FROM recipes r
-                      INNER JOIN favorites f ON r.id = f.recipe_id
-                      WHERE f.user_id = :user_id
-                      ORDER BY f.created_at DESC
-                      LIMIT :limit";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
-            $stmt->execute();
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            error_log("Get Favorites Error: " . $e->getMessage());
-            return [];
-        }
+    public function getAll(int $limit = USERS_PER_PAGE, int $offset = 0): array {
+        $st = $this->db->prepare(
+            "SELECT id, full_name, username, email, status, created_at
+             FROM {$this->table}
+             ORDER BY created_at DESC
+             LIMIT ? OFFSET ?"
+        );
+        $st->execute([$limit, $offset]);
+        return $st->fetchAll();
     }
 
-    /**
-     * Get user's recent views
-     */
-    public function getRecentViews($user_id, $limit = 10) {
-        try {
-            $query = "SELECT r.*, rv.viewed_at FROM recipes r
-                      INNER JOIN recent_views rv ON r.id = rv.recipe_id
-                      WHERE rv.user_id = :user_id
-                      ORDER BY rv.viewed_at DESC
-                      LIMIT :limit";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':user_id', $user_id, PDO::PARAM_INT);
-            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
-            $stmt->execute();
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (PDOException $e) {
-            error_log("Get Recent Views Error: " . $e->getMessage());
-            return [];
-        }
+    public function getTotalCount(): int {
+        return (int) $this->db->query("SELECT COUNT(*) FROM {$this->table}")->fetchColumn();
     }
 
-    /**
-     * Get user stats
-     */
-    public function getUserStats($user_id) {
-        try {
-            $conn = $this->conn;
-            // Favorites count
-            $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM favorites WHERE user_id = :uid");
-            $stmt->execute([':uid' => $user_id]);
-            $fav_count = $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
+    /* ── Update ─────────────────────────────────────────────── */
 
-            // Ratings count
-            $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM ratings WHERE user_id = :uid");
-            $stmt->execute([':uid' => $user_id]);
-            $rating_count = $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
-
-            // Recent views count
-            $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM recent_views WHERE user_id = :uid");
-            $stmt->execute([':uid' => $user_id]);
-            $view_count = $stmt->fetch(PDO::FETCH_ASSOC)['cnt'];
-
-            return [
-                'favorites' => (int)$fav_count,
-                'ratings' => (int)$rating_count,
-                'views' => (int)$view_count
-            ];
-        } catch (PDOException $e) {
-            error_log("Get User Stats Error: " . $e->getMessage());
-            return ['favorites' => 0, 'ratings' => 0, 'views' => 0];
+    public function updateProfile(int $id, array $data): array {
+        $fullName = sanitize($data['full_name'] ?? '');
+        if (empty($fullName)) {
+            return ['success' => false, 'message' => 'Full name cannot be empty.'];
         }
+        $st = $this->db->prepare(
+            "UPDATE {$this->table} SET full_name=?, food_preferences=?, dietary_restrictions=?,
+             daily_calorie_goal=? WHERE id=?"
+        );
+        $st->execute([
+            $fullName,
+            sanitize($data['food_preferences']    ?? ''),
+            sanitize($data['dietary_restrictions'] ?? ''),
+            (int) ($data['daily_calorie_goal'] ?? 2000),
+            $id,
+        ]);
+        // Sync session
+        $_SESSION['full_name']             = $fullName;
+        $_SESSION['food_preferences']      = $data['food_preferences']    ?? '';
+        $_SESSION['dietary_restrictions']  = $data['dietary_restrictions'] ?? '';
+        return ['success' => true, 'message' => 'Profile updated successfully.'];
     }
 
-    /**
-     * Check if username exists
-     */
-    private function usernameExists($username) {
-        try {
-            $query = "SELECT id FROM " . $this->table . " WHERE username = :username LIMIT 1";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $username);
-            $stmt->execute();
-            return $stmt->rowCount() > 0;
-        } catch (PDOException $e) {
-            error_log("Username Check Error: " . $e->getMessage());
-            return false;
+    public function updatePassword(int $id, string $current, string $newPass): array {
+        if (strlen($newPass) < 6) {
+            return ['success' => false, 'message' => 'New password must be at least 6 characters.'];
         }
+        $st = $this->db->prepare("SELECT password FROM {$this->table} WHERE id=?");
+        $st->execute([$id]);
+        $row = $st->fetch();
+        if (!$row || !password_verify($current, $row['password'])) {
+            return ['success' => false, 'message' => 'Current password is incorrect.'];
+        }
+        $hash = password_hash($newPass, PASSWORD_BCRYPT, ['cost' => 12]);
+        $this->db->prepare("UPDATE {$this->table} SET password=? WHERE id=?")->execute([$hash, $id]);
+        return ['success' => true, 'message' => 'Password changed successfully.'];
     }
 
-    /**
-     * Check if email exists
-     */
-    private function emailExists($email) {
-        try {
-            $query = "SELECT id FROM " . $this->table . " WHERE email = :email LIMIT 1";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':email', $email);
-            $stmt->execute();
-            return $stmt->rowCount() > 0;
-        } catch (PDOException $e) {
-            error_log("Email Check Error: " . $e->getMessage());
-            return false;
-        }
+    /* ── Admin: User Management ─────────────────────────────── */
+
+    public function deactivate(int $id): bool {
+        return $this->db->prepare(
+            "UPDATE {$this->table} SET status='deactivated' WHERE id=?"
+        )->execute([$id]);
     }
 
-    /**
-     * Find user by Google ID
-     */
-    public function findByGoogleId($googleId) {
-        try {
-            $query = "SELECT id, username, email, food_preferences, dietary_restrictions 
-                      FROM " . $this->table . " 
-                      WHERE google_id = :google_id LIMIT 1";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':google_id', $googleId);
-            $stmt->execute();
-            if ($stmt->rowCount() > 0) {
-                return $stmt->fetch(PDO::FETCH_ASSOC);
-            }
-            return null;
-        } catch (PDOException $e) {
-            error_log("Find By Google ID Error: " . $e->getMessage());
-            return null;
-        }
+    public function activate(int $id): bool {
+        return $this->db->prepare(
+            "UPDATE {$this->table} SET status='active' WHERE id=?"
+        )->execute([$id]);
     }
 
-    /**
-     * Find user by email (public version)
-     */
-    public function findByEmail($email) {
-        try {
-            $query = "SELECT id, username, email, food_preferences, dietary_restrictions 
-                      FROM " . $this->table . " 
-                      WHERE email = :email LIMIT 1";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':email', $email);
-            $stmt->execute();
-            if ($stmt->rowCount() > 0) {
-                return $stmt->fetch(PDO::FETCH_ASSOC);
-            }
-            return null;
-        } catch (PDOException $e) {
-            error_log("Find By Email Error: " . $e->getMessage());
-            return null;
-        }
+    public function delete(int $id): bool {
+        return $this->db->prepare("DELETE FROM {$this->table} WHERE id=?")->execute([$id]);
     }
 
-    /**
-     * Find user by username (public version)
-     */
-    public function findByUsername($username) {
-        try {
-            $query = "SELECT id, username FROM " . $this->table . " WHERE username = :username LIMIT 1";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $username);
-            $stmt->execute();
-            if ($stmt->rowCount() > 0) {
-                return $stmt->fetch(PDO::FETCH_ASSOC);
-            }
-            return null;
-        } catch (PDOException $e) {
-            error_log("Find By Username Error: " . $e->getMessage());
-            return null;
-        }
+    /* ── Pantry ─────────────────────────────────────────────── */
+
+    public function getPantry(int $userId): array {
+        $st = $this->db->prepare(
+            "SELECT i.*, p.quantity, p.added_at
+             FROM ingredients i
+             JOIN pantry_items p ON i.id = p.ingredient_id
+             WHERE p.user_id = ?
+             ORDER BY i.category, i.name"
+        );
+        $st->execute([$userId]);
+        return $st->fetchAll();
     }
 
-    /**
-     * Link Google account to existing user
-     */
-    public function linkGoogleAccount($userId, $googleId) {
-        try {
-            $query = "UPDATE " . $this->table . " SET google_id = :google_id WHERE id = :id";
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':google_id', $googleId);
-            $stmt->bindParam(':id', $userId, PDO::PARAM_INT);
-            return $stmt->execute();
-        } catch (PDOException $e) {
-            error_log("Link Google Account Error: " . $e->getMessage());
-            return false;
-        }
+    public function getPantryIngredientIds(int $userId): array {
+        $st = $this->db->prepare(
+            "SELECT ingredient_id FROM pantry_items WHERE user_id = ?"
+        );
+        $st->execute([$userId]);
+        return $st->fetchAll(PDO::FETCH_COLUMN, 0);
     }
 
-    /**
-     * Register new user via Google OAuth
-     */
-    public function registerWithGoogle($username, $email, $googleId) {
-        if (empty($username) || empty($email) || empty($googleId)) {
-            return ['success' => false, 'message' => 'Missing required information from Google'];
-        }
-
-        if ($this->usernameExists($username)) {
-            return ['success' => false, 'message' => 'Username already exists. Please try again.'];
-        }
-
-        if ($this->emailExists($email)) {
-            return ['success' => false, 'message' => 'Email already registered. Please login instead.'];
-        }
-
-        $username = sanitize($username);
-        $email = sanitize($email);
-
-        // Generate a random password hash for Google users (they won't use it)
-        $randomPassword = bin2hex(random_bytes(32));
-        $passwordHash = password_hash($randomPassword, PASSWORD_BCRYPT);
-
-        try {
-            $query = "INSERT INTO " . $this->table . " 
-                      (username, email, password_hash, google_id, food_preferences, dietary_restrictions) 
-                      VALUES (:username, :email, :password_hash, :google_id, '', '')";
-
-            $stmt = $this->conn->prepare($query);
-            $stmt->bindParam(':username', $username);
-            $stmt->bindParam(':email', $email);
-            $stmt->bindParam(':password_hash', $passwordHash);
-            $stmt->bindParam(':google_id', $googleId);
-
-            if ($stmt->execute()) {
-                $userId = $this->conn->lastInsertId();
-                return ['success' => true, 'message' => 'Registration successful', 'user_id' => $userId];
-            }
-
-            return ['success' => false, 'message' => 'Registration failed'];
-        } catch (PDOException $e) {
-            error_log("Google Registration Error: " . $e->getMessage());
-            return ['success' => false, 'message' => 'Database error occurred'];
-        }
+    public function addToPantry(int $userId, int $ingredientId, float $qty = 1): bool {
+        $st = $this->db->prepare(
+            "INSERT INTO pantry_items (user_id, ingredient_id, quantity)
+             VALUES (?,?,?)
+             ON DUPLICATE KEY UPDATE quantity = ?"
+        );
+        return $st->execute([$userId, $ingredientId, $qty, $qty]);
     }
 
-    /**
-     * Get total users count
-     */
-    public function getTotalUsers() {
-        try {
-            $query = "SELECT COUNT(*) as total FROM " . $this->table;
-            $stmt = $this->conn->prepare($query);
-            $stmt->execute();
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            return (int)$result['total'];
-        } catch (PDOException $e) {
-            error_log("Get Total Users Error: " . $e->getMessage());
-            return 0;
-        }
+    public function removeFromPantry(int $userId, int $ingredientId): bool {
+        return $this->db->prepare(
+            "DELETE FROM pantry_items WHERE user_id=? AND ingredient_id=?"
+        )->execute([$userId, $ingredientId]);
+    }
+
+    public function updatePantryQuantity(int $userId, int $ingredientId, float $qty): bool {
+        return $this->db->prepare(
+            "UPDATE pantry_items SET quantity=? WHERE user_id=? AND ingredient_id=?"
+        )->execute([$qty, $userId, $ingredientId]);
+    }
+
+    public function clearPantry(int $userId): bool {
+        return $this->db->prepare(
+            "DELETE FROM pantry_items WHERE user_id=?"
+        )->execute([$userId]);
+    }
+
+    /* ── Favorites ──────────────────────────────────────────── */
+
+    public function getFavorites(int $userId, int $limit = 50): array {
+        $st = $this->db->prepare(
+            "SELECT r.*, f.created_at AS saved_at
+             FROM recipes r
+             JOIN favorites f ON r.id = f.recipe_id
+             WHERE f.user_id = ?
+             ORDER BY f.created_at DESC
+             LIMIT ?"
+        );
+        $st->execute([$userId, $limit]);
+        return $st->fetchAll();
+    }
+
+    public function isFavorited(int $userId, int $recipeId): bool {
+        $st = $this->db->prepare(
+            "SELECT id FROM favorites WHERE user_id=? AND recipe_id=? LIMIT 1"
+        );
+        $st->execute([$userId, $recipeId]);
+        return (bool) $st->fetch();
+    }
+
+    public function addFavorite(int $userId, int $recipeId): bool {
+        $st = $this->db->prepare(
+            "INSERT IGNORE INTO favorites (user_id, recipe_id) VALUES (?,?)"
+        );
+        return $st->execute([$userId, $recipeId]);
+    }
+
+    public function removeFavorite(int $userId, int $recipeId): bool {
+        return $this->db->prepare(
+            "DELETE FROM favorites WHERE user_id=? AND recipe_id=?"
+        )->execute([$userId, $recipeId]);
+    }
+
+    /* ── Recently Viewed ────────────────────────────────────── */
+
+    public function recordView(int $userId, int $recipeId): void {
+        $this->db->prepare(
+            "INSERT INTO recently_viewed (user_id, recipe_id)
+             VALUES (?,?)
+             ON DUPLICATE KEY UPDATE viewed_at = CURRENT_TIMESTAMP"
+        )->execute([$userId, $recipeId]);
+    }
+
+    public function getRecentlyViewed(int $userId, int $limit = 10): array {
+        $st = $this->db->prepare(
+            "SELECT r.*, rv.viewed_at
+             FROM recipes r
+             JOIN recently_viewed rv ON r.id = rv.recipe_id
+             WHERE rv.user_id = ?
+             ORDER BY rv.viewed_at DESC
+             LIMIT ?"
+        );
+        $st->execute([$userId, $limit]);
+        return $st->fetchAll();
+    }
+
+    /* ── Stats ──────────────────────────────────────────────── */
+
+    public function getStats(int $userId): array {
+        $favCount = $this->db->prepare("SELECT COUNT(*) FROM favorites WHERE user_id=?");
+        $favCount->execute([$userId]);
+
+        $viewCount = $this->db->prepare("SELECT COUNT(*) FROM recently_viewed WHERE user_id=?");
+        $viewCount->execute([$userId]);
+
+        $ratingCount = $this->db->prepare("SELECT COUNT(*) FROM ratings WHERE user_id=?");
+        $ratingCount->execute([$userId]);
+
+        $pantryCount = $this->db->prepare("SELECT COUNT(*) FROM pantry_items WHERE user_id=?");
+        $pantryCount->execute([$userId]);
+
+        return [
+            'favorites'  => (int) $favCount->fetchColumn(),
+            'views'      => (int) $viewCount->fetchColumn(),
+            'ratings'    => (int) $ratingCount->fetchColumn(),
+            'pantry'     => (int) $pantryCount->fetchColumn(),
+        ];
+    }
+
+    /* ── Private ────────────────────────────────────────────── */
+
+    private function existsByColumn(string $col, string $val): bool {
+        $st = $this->db->prepare("SELECT id FROM {$this->table} WHERE $col = ? LIMIT 1");
+        $st->execute([$val]);
+        return (bool) $st->fetch();
     }
 }
-?>
-

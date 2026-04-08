@@ -1,95 +1,60 @@
 <?php
 /**
  * Application Constants
- * Defines application-wide constants
+ * Smart Pantry – A Recipe Recommendation System
  */
 
-// Base URL
+// Base URL — adjust if you rename the folder
 define('BASE_URL', 'http://localhost/smartpantry/');
 
 // Paths
-define('ROOT_PATH', dirname(__DIR__) . '/');
-define('VIEWS_PATH', ROOT_PATH . 'views/');
-define('MODELS_PATH', ROOT_PATH . 'models/');
+define('ROOT_PATH',        dirname(__DIR__) . '/');
+define('VIEWS_PATH',       ROOT_PATH . 'views/');
+define('MODELS_PATH',      ROOT_PATH . 'models/');
 define('CONTROLLERS_PATH', ROOT_PATH . 'controllers/');
-define('ASSETS_PATH', BASE_URL . 'assets/');
-define('IMAGES_PATH', ROOT_PATH . 'assets/images/');
+define('ASSETS_PATH',      BASE_URL  . 'assets/');
+define('UPLOADS_PATH',     ROOT_PATH . 'assets/images/uploads/');
+define('UPLOADS_URL',      BASE_URL  . 'assets/images/uploads/');
 
-// Session settings
-define('SESSION_LIFETIME', 3600); // 1 hour
-define('SESSION_NAME', 'SMARTPANTRY_SESSION');
+// Session
+define('SESSION_LIFETIME', 7200);           // 2 hours
+define('SESSION_NAME',     'SMARTPANTRY');
 
 // Pagination
-define('RECIPES_PER_PAGE', 12);
-define('FEEDBACK_PER_PAGE', 10);
+define('RECIPES_PER_PAGE',   12);
+define('USERS_PER_PAGE',     20);
 
-// File upload settings
-define('MAX_FILE_SIZE', 5242880); // 5MB
-define('ALLOWED_IMAGE_TYPES', ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+// File upload
+define('MAX_FILE_SIZE',       5242880);     // 5 MB
+define('ALLOWED_IMAGE_TYPES', ['image/jpeg','image/png','image/gif','image/webp']);
 
-// Recipe categories
+// Diet types
+define('DIET_TYPES', ['Vegetarian', 'Vegan', 'Non-Vegetarian']);
+
+// Recipe cuisine categories
 define('RECIPE_CATEGORIES', [
-    'Nepali',
-    'Indian',
-    'Continental',
-    'Chinese',
-    'Italian',
-    'Mexican',
-    'Thai',
-    'Other'
+    'Nepali', 'Indian', 'Italian', 'Chinese',
+    'Continental', 'Mexican', 'Thai', 'Other'
 ]);
 
 // Ingredient categories
 define('INGREDIENT_CATEGORIES', [
-    'Vegetables',
-    'Fruits',
-    'Proteins',
-    'Grains',
-    'Legumes',
-    'Dairy',
-    'Spices',
-    'Oils',
-    'Herbs',
-    'Other'
+    'Vegetables', 'Fruits', 'Proteins', 'Grains',
+    'Legumes', 'Dairy', 'Spices', 'Oils', 'Extras'
 ]);
 
-// Food preferences
-define('FOOD_PREFERENCES', [
-    'Nepali',
-    'Indian',
-    'Continental',
-    'Chinese',
-    'Italian',
-    'Mexican',
-    'Thai',
-    'Mixed'
+// Sort options for recipe search
+define('SORT_OPTIONS', [
+    'match'    => 'Best Match',
+    'calories' => 'Calories (Low-High)',
+    'time'     => 'Prep Time (Fast)',
+    'rating'   => 'Highest Rated',
 ]);
 
-// Dietary restrictions
-define('DIETARY_RESTRICTIONS', [
-    'Vegetarian',
-    'Vegan',
-    'Gluten-Free',
-    'Dairy-Free',
-    'Nut-Free',
-    'None'
-]);
-
-// Rating scale
+// Rating
 define('MIN_RATING', 1);
 define('MAX_RATING', 5);
 
-// Google OAuth Settings
-// Load credentials from secrets.php (not committed to git)
-$secretsFile = __DIR__ . '/secrets.php';
-if (file_exists($secretsFile)) {
-    require_once $secretsFile;
-}
-if (!defined('GOOGLE_CLIENT_ID')) {
-    define('GOOGLE_CLIENT_ID', '');
-}
-if (!defined('GOOGLE_CLIENT_SECRET')) {
-    define('GOOGLE_CLIENT_SECRET', '');
-}
-define('GOOGLE_REDIRECT_URI', BASE_URL . 'controllers/GoogleAuthController.php');
-
+// Google OAuth Credentials
+define('GOOGLE_CLIENT_ID', 'YOUR_GOOGLE_CLIENT_ID_HERE');
+define('GOOGLE_CLIENT_SECRET', 'YOUR_GOOGLE_CLIENT_SECRET_HERE');

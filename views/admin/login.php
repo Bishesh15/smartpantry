@@ -1,95 +1,60 @@
 <?php
 $page_title = 'Admin Login';
-require_once __DIR__ . '/../includes/admin-header.php';
+require_once __DIR__ . '/../../includes/session.php';
+require_once __DIR__ . '/../../includes/functions.php';
+require_once __DIR__ . '/../../config/constants.php';
 
-// Redirect if already logged in as admin
-if (isAdmin()) {
-    redirect(BASE_URL . 'views/admin/dashboard.php');
-}
-
-// If user is logged in, show message
-if (isLoggedIn() && !isAdmin()) {
-    $_SESSION['error'] = 'You are logged in as a regular user. Please logout first.';
-}
+if (isAdmin()) redirect(BASE_URL . 'views/admin/dashboard.php');
 ?>
-
-<div class="container">
-    <div class="auth-container">
-        <div class="auth-form">
-            <h2>Admin Login</h2>
-            <p class="auth-subtitle">Administrator access only</p>
-
-            <form id="adminLoginForm" method="POST" action="<?php echo BASE_URL; ?>controllers/AdminController.php">
-                <input type="hidden" name="action" value="admin_login">
-                <input type="hidden" name="csrf_token" value="<?php echo generateCSRFToken(); ?>">
-                <input type="hidden" name="password_hash" id="password_hash">
-
-                <div class="form-group">
-                    <label for="username">Username *</label>
-                    <input type="text" id="username" name="username" required autofocus>
-                </div>
-
-                <div class="form-group">
-                    <label for="password">Password *</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-
-                <button type="submit" class="btn btn-primary">Login</button>
-            </form>
-
-            <p class="auth-link">
-                Don't have an admin account? <a href="<?php echo BASE_URL; ?>views/admin/register.php">Register here</a>
-            </p>
-        </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Admin Login | SmartPantry</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="<?= ASSETS_PATH ?>css/admin.css?v=2" rel="stylesheet">
+</head>
+<body>
+<div class="admin-auth-wrap">
+  <div class="admin-auth-card">
+    <div class="text-center mb-4">
+      <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-3"
+           style="width:60px;height:60px;background:#16a34a;">
+        <i class="bi bi-shield-lock-fill text-white" style="font-size:1.8rem;"></i>
+      </div>
+      <h2 class="fw-black mb-1">Admin Portal</h2>
+      <p class="text-muted small">SmartPantry Administration</p>
     </div>
+
+    <?= renderFlash() ?>
+
+    <form method="POST" action="<?= BASE_URL ?>controllers/AdminController.php">
+      <input type="hidden" name="action" value="admin_login">
+      <input type="hidden" name="csrf_token" value="<?= generateCSRFToken() ?>">
+      <div class="mb-3">
+        <label class="admin-label">Admin Username</label>
+        <input type="text" name="username" class="admin-input" placeholder="admin" autocomplete="username" required>
+      </div>
+      <div class="mb-3">
+        <label class="admin-label">Password</label>
+        <input type="password" name="password" class="admin-input" placeholder="Your password" required>
+      </div>
+      <button type="submit" class="btn-admin-primary w-100 justify-content-center py-3 mt-2">
+        <i class="bi bi-box-arrow-in-right"></i> Sign in to Admin
+      </button>
+    </form>
+
+    <p class="text-center text-muted mt-4" style="font-size:.78rem;">
+      Default: <strong>admin</strong> / <strong>admin123</strong>
+    </p>
+    <p class="text-center mt-1">
+      <a href="<?= BASE_URL ?>views/user/login.php" style="font-size:.78rem;color:#64748b;">← User Login</a>
+    </p>
+  </div>
 </div>
-
-<script>
-// Client-side password hashing using Web Crypto API
-async function hashPassword(password) {
-    try {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(password);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        return hashHex;
-    } catch (error) {
-        console.error('Password hashing error:', error);
-        throw error;
-    }
-}
-
-// Initialize form handler
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('adminLoginForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const password = document.getElementById('password').value;
-        
-        // Disable submit button
-        const submitBtn = this.querySelector('button[type="submit"]');
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Logging in...';
-        
-        try {
-            // Hash password using Web Crypto API
-            const hashedPassword = await hashPassword(password);
-            
-            // Set the hashed password
-            document.getElementById('password_hash').value = hashedPassword;
-            
-            // Submit the form
-            this.submit();
-        } catch (error) {
-            console.error('Error:', error);
-            alert('An error occurred while processing your password. Please try again.');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Login';
-        }
-    });
-});
-</script>
-
-<?php require_once __DIR__ . '/../includes/admin-footer.php'; ?>
-
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>document.documentElement.dataset.baseUrl='<?= BASE_URL ?>';</script>
+<script src="<?= ASSETS_PATH ?>js/main.js"></script>
+</body>
+</html>
