@@ -24,6 +24,11 @@ $totalRatings     = $ratingModel->getTotalCount();
 $pendingFeedback  = $feedbackModel->getTotalCount('pending');
 $mostViewed       = $recipeModel->getMostViewed(5);
 $recentUsers      = $userModel->getAll(5, 0);
+
+// Fetch stats for charts
+$userGrowth      = $userModel->getRegistrationStats(7);
+$recipeCats      = $recipeModel->getCategoryStats();
+$recipeDiets     = $recipeModel->getDietTypeStats();
 ?>
 
 <!-- Stat Cards -->
@@ -56,6 +61,49 @@ $recentUsers      = $userModel->getAll(5, 0);
   awaiting response. <a href="<?= BASE_URL ?>views/admin/feedback.php" class="alert-link ms-2">View Now →</a>
 </div>
 <?php endif; ?>
+
+<!-- Insights Charts -->
+<div class="row g-4 mb-4">
+  <!-- User Growth Chart -->
+  <div class="col-lg-7">
+    <div class="admin-card h-100">
+      <div class="admin-card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-graph-up-arrow text-primary"></i> User Growth (Last 7 Days)</span>
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Real-time</span>
+      </div>
+      <div class="p-4">
+        <div style="height: 300px; position: relative;">
+          <canvas id="growthChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Recipe & Diet Distribution -->
+  <div class="col-lg-5">
+    <div class="admin-card h-100">
+      <div class="admin-card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-pie-chart-fill text-danger"></i> Pantry Composition</span>
+      </div>
+      <div class="p-4">
+        <div class="row g-3">
+          <div class="col-6 text-center">
+            <div class="mb-3 fw-bold" style="font-size:.78rem;color:var(--admin-gray);">Cuisine Types</div>
+            <div style="height: 200px; position: relative;">
+              <canvas id="categoryChart"></canvas>
+            </div>
+          </div>
+          <div class="col-6 text-center">
+            <div class="mb-3 fw-bold" style="font-size:.78rem;color:var(--admin-gray);">Dietary Split</div>
+            <div style="height: 200px; position: relative;">
+              <canvas id="dietChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="row g-4">
   <!-- Most Viewed Recipes -->
@@ -158,3 +206,90 @@ $recentUsers      = $userModel->getAll(5, 0);
 </div>
 
 <?php require_once __DIR__ . '/../includes/admin-footer.php'; ?>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctxGrowth = document.getElementById('growthChart').getContext('2d');
+    const ctxCat    = document.getElementById('categoryChart').getContext('2d');
+    const ctxDiet   = document.getElementById('dietChart').getContext('2d');
+
+    // Colors
+    const colors = {
+        primary: '#3b82f6',
+        success: '#10b981',
+        warning: '#f59e0b',
+        danger: '#ef4444',
+        purple: '#8b5cf6',
+        rose: '#f43f5e',
+        teal: '#14b8a6'
+    };
+
+    // User Growth Bar Chart
+    new Chart(ctxGrowth, {
+        type: 'bar',
+        data: {
+            labels: <?= json_encode(array_map(fn($d) => date('M j', strtotime($d)), array_keys($userGrowth))) ?>,
+            datasets: [{
+                label: 'New Users',
+                data: <?= json_encode(array_values($userGrowth)) ?>,
+                backgroundColor: colors.primary + '33',
+                borderColor: colors.primary,
+                borderWidth: 2,
+                borderRadius: 5,
+                hoverBackgroundColor: colors.primary
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    // Category Pie Chart
+    new Chart(ctxCat, {
+        type: 'pie',
+        data: {
+            labels: <?= json_encode(array_keys($recipeCats)) ?>,
+            datasets: [{
+                data: <?= json_encode(array_values($recipeCats)) ?>,
+                backgroundColor: [colors.primary, colors.success, colors.warning, colors.danger, colors.purple, colors.rose],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } }
+        }
+    });
+
+    // Diet Type Doughnut Chart
+    new Chart(ctxDiet, {
+        type: 'doughnut',
+        data: {
+            labels: <?= json_encode(array_keys($recipeDiets)) ?>,
+            datasets: [{
+                data: <?= json_encode(array_values($recipeDiets)) ?>,
+                backgroundColor: [colors.success, colors.rose, colors.warning],
+                borderWidth: 0,
+                hoverOffset: 15
+            }]
+        },
+        options: {
+            cutout: '70%',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 9 }, padding: 15 } } 
+            }
+        }
+    });
+});
+</script>

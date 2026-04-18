@@ -347,4 +347,20 @@ class Recipe {
             }
         }
     }
+
+    /* ── Stats ────────────────────────────────────────────── */
+
+    public function getCategoryStats(): array {
+        $st = $this->db->query(
+            "SELECT category, COUNT(*) as count FROM {$this->table} GROUP BY category ORDER BY count DESC"
+        );
+        return $st->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
+
+    public function getDietTypeStats(): array {
+        $st = $this->db->query(
+            "SELECT diet_type, COUNT(*) as count FROM {$this->table} GROUP BY diet_type"
+        );
+        return $st->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
 }

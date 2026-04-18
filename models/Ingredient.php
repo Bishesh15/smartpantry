@@ -120,4 +120,13 @@ class Ingredient {
             "DELETE FROM {$this->table} WHERE id=?"
         )->execute([$id]);
     }
+
+    /* ── Stats ────────────────────────────────────────────── */
+
+    public function getCategoryStats(): array {
+        $st = $this->db->query(
+            "SELECT category, COUNT(*) as count FROM {$this->table} GROUP BY category ORDER BY count DESC"
+        );
+        return $st->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
 }

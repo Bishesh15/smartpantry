@@ -339,6 +339,30 @@ class User {
         ];
     }
 
+    /** Returns user counts for the last $days, grouped by date */
+    public function getRegistrationStats(int $days = 7): array {
+        $st = $this->db->prepare(
+            "SELECT DATE(created_at) as reg_date, COUNT(*) as count
+             FROM {$this->table}
+             WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+             GROUP BY DATE(created_at)
+             ORDER BY reg_date ASC"
+        );
+        $st->execute([$days]);
+        $rows = $st->fetchAll();
+        
+        $stats = [];
+        // Fill gaps with 0
+        for ($i = $days - 1; $i >= 0; $i--) {
+            $date = date('Y-m-d', strtotime("-$i days"));
+            $stats[$date] = 0;
+        }
+        foreach ($rows as $r) {
+            $stats[$r['reg_date']] = (int)$r['count'];
+        }
+        return $stats;
+    }
+
     /* ── Private ────────────────────────────────────────────── */
 
     private function existsByColumn(string $col, string $val): bool {
