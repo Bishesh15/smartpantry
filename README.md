@@ -67,3 +67,139 @@ All user-facing pages share the same navbar from `landing.css` with a green `#22
 
 **1. Clone or copy** the project into:
 ```
+C:\xampp\htdocs\smartpantry\
+```
+
+**2. Database setup**
+- Create a MySQL database named `smartpantry`
+- Import the schema using terminal:
+```bash
+mysql -u root -p smartpantry < schema.sql
+```
+- Or use phpMyAdmin to import `schema.sql`
+
+**3. Configuration**
+- Update database credentials in `config/database.php` if needed
+- Update `BASE_URL` in `config/constants.php` if your path differs:
+```php
+define('BASE_URL', 'http://localhost/smartpantry/');
+```
+
+**4. Google OAuth** (optional)
+- Copy `config/secrets.example.php` to `config/secrets.php`
+- Fill in your Google OAuth client ID and secret
+
+**5. bcrypt.js**
+- Ensure `assets/js/bcrypt.min.js` contains the actual library
+- Download from: https://github.com/dcodeIO/bcrypt.js
+
+**6. Directory permissions**
+- Ensure these folders are writable:
+  - `assets/images/recipes/`
+  - `assets/images/ingredients/`
+
+---
+
+## Default Admin Credentials
+
+| Field | Value |
+|-------|-------|
+| Username | `admin` |
+| Password | `admin123` |
+
+> ⚠️ Change the admin password after first login.
+
+---
+
+## Project Structure
+
+```
+smartpantry/
+├── index.php                   # Entry point
+├── schema.sql                  # Database schema
+├── config/
+│   ├── constants.php           # BASE_URL, categories, dietary options
+│   ├── database.php            # PDO connection singleton
+│   ├── secrets.php             # Google OAuth credentials (gitignored)
+│   └── secrets.example.php
+├── controllers/
+│   ├── AuthController.php      # Login, register, logout
+│   ├── GoogleAuthController.php
+│   ├── RecipeController.php    # Search, detail actions
+│   ├── UserController.php      # Ratings, favorites, preferences
+│   └── AdminController.php
+├── models/
+│   ├── User.php                # Auth, preferences, stats
+│   ├── Recipe.php              # Recipe CRUD and search
+│   ├── Ingredient.php
+│   ├── Rating.php
+│   └── Feedback.php
+├── views/
+│   ├── user/
+│   │   ├── home.php            # Landing page
+│   │   ├── recipe-search.php   # Search results with filters
+│   │   ├── recipe-detail.php   # Full recipe view
+│   │   ├── dashboard.php       # User dashboard and settings
+│   │   ├── contact.php         # Contact / feedback form
+│   │   ├── login.php
+│   │   └── register.php
+│   ├── admin/
+│   │   ├── dashboard.php
+│   │   ├── recipes.php
+│   │   ├── ingredients.php
+│   │   ├── feedback.php
+│   │   └── includes/header.php
+│   └── includes/               # Shared partials
+├── assets/
+│   ├── css/
+│   │   ├── landing.css         # Shared nav + landing page
+│   │   ├── recipe-search.css
+│   │   ├── recipe-detail.css
+│   │   ├── dashboard.css
+│   │   ├── contact.css
+│   │   ├── auth.css
+│   │   ├── admin.css
+│   │   └── style.css
+│   ├── js/
+│   │   ├── bcrypt.min.js       # Client-side password hashing
+│   │   ├── main.js
+│   │   ├── recipe-matching.js
+│   │   └── validation.js
+│   └── images/
+│       ├── recipes/
+│       └── ingredients/
+├── includes/
+│   ├── functions.php           # CSRF, sanitize, helpers
+│   └── session.php
+└── api/
+    └── auth/
+        └── admin-logout-api.php
+```
+
+---
+
+## Usage
+
+1. **Landing page** — Visit `http://localhost/smartpantry/` to search by ingredients or browse
+2. **Login / Register** — Create an account or log in with double-hashed passwords
+3. **Search recipes** — Enter ingredients, apply filters. Results show match percentage
+4. **Recipe detail** — View ingredients, nutrition, instructions. Rate and save to favorites
+5. **Dashboard** — View stats, saved recipes, history. Update profile and dietary preferences
+6. **Contact** — Send feedback or questions via the contact form
+7. **Admin** — Visit `/views/admin/login.php` to manage recipes, ingredients, and feedback
+
+---
+
+## Security
+
+- Double password hashing (client-side bcrypt → server-side `password_hash()`)
+- PDO prepared statements (SQL injection prevention)
+- Input sanitization via `sanitize()`, `validateInteger()`, `validateFloat()`
+- CSRF token on all POST forms
+- Session-based auth guards (`isLoggedIn()`, `requireAdmin()`)
+
+---
+
+## License
+
+This project is open source and available for educational purposes.
